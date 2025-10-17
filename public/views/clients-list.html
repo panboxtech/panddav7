@@ -1,0 +1,16 @@
+<!-- Estrutura estática e template seguro para a lista -->
+<div class="clients-root">
+  <div class="clients-toolbar">
+    <button id="newClientBtn" class="btn-primary" type="button">Novo cliente</button>
+    <input id="searchClients" type="search" placeholder="Buscar por nome, usuário, telefone" />
+  </div>
+
+  <div id="clientsList" class="card" aria-live="polite">
+    <table class="table" id="clientsTable" role="table">
+      <thead><tr><th>Nome</th><th>Telefone</th><th>Usuário</th><th>Ações</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div id="clientFormRoot" class="card hidden" aria-hidden="true"></div>
+</div>
