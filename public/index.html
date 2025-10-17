@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Streaming — Login</title>
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/login.css" />
+</head>
+<body>
+  <main class="login-root">
+    <section class="login-card">
+      <h1>Entrar</h1>
+      <form id="loginForm" class="login-form" novalidate>
+        <label>
+          <span>Usuário ou telefone</span>
+          <input type="text" id="loginUser" autocomplete="username" required />
+        </label>
+        <label>
+          <span>Senha</span>
+          <input type="password" id="loginPass" autocomplete="current-password" required />
+        </label>
+        <div class="login-actions">
+          <button type="submit" class="btn-primary">Entrar</button>
+        </div>
+        <div id="loginMessage" class="msg" aria-live="polite"></div>
+      </form>
+    </section>
+  </main>
+
+  <script type="module" src="js/auth.js"></script>
+</body>
+</html>
