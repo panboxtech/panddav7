@@ -1,5 +1,6 @@
+// js/ui.js
 // controla sidebar, overlay, mobile behavior, logout e carregamento seguro de views
-import '../views/clients-list.html';
+// NÃO importar arquivos HTML com import; usar fetch('./views/....html').
 
 document.addEventListener('DOMContentLoaded', ()=>{
   const sidebar = document.getElementById('sidebar');
@@ -21,7 +22,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   mobileBtn?.addEventListener('click', openMobileSidebar);
   overlay?.addEventListener('click', closeMobileSidebar);
   toggleBtn?.addEventListener('click', toggleDesktopSidebar);
-  logoutBtn?.addEventListener('click', ()=>{ localStorage.removeItem('mock_auth'); window.location.href='index.html' });
+  logoutBtn?.addEventListener('click', ()=>{ localStorage.removeItem('mock_auth'); window.location.href='./index.html' });
 
   viewButtons.forEach(btn=>{
     btn.addEventListener('click', async ()=>{
@@ -33,21 +34,25 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
 
   async function loadView(name){
-    // carrega a view estática (arquivo HTML com estrutura e template)
-    // fetch apenas do arquivo controlado para acessar templates estáticos
-    if(name === 'clients'){
-      const res = await fetch('views/clients-list.html');
-      const text = await res.text();
-      // criar container temporário para inserir a estrutura estática de view
-      const temp = document.createElement('div');
-      temp.innerHTML = text;
-      // limpa viewRoot e anexa nodes (estrutura conhecida estática)
-      viewRoot.innerHTML = '';
-      Array.from(temp.childNodes).forEach(node => viewRoot.appendChild(node));
-      // inicializa view (clients-view exporta init automaticamente)
-      if(window.clientsView && typeof window.clientsView.init === 'function'){
-        window.clientsView.init();
+    try{
+      if(name === 'clients'){
+        const res = await fetch('./views/clients-list.html', {cache: 'no-store'});
+        if(!res.ok) throw new Error(`Falha ao carregar view clients: ${res.status} ${res.statusText}`);
+        const text = await res.text();
+        const temp = document.createElement('div');
+        temp.innerHTML = text;
+        viewRoot.innerHTML = '';
+        Array.from(temp.childNodes).forEach(node => viewRoot.appendChild(node));
+        // chama init da view se disponível globalmente
+        if(window.clientsView && typeof window.clientsView.init === 'function'){
+          try{ await window.clientsView.init(); }catch(err){ console.error('Erro inicializando clientsView:', err); }
+        }
+      } else {
+        console.warn('View não registrada:', name);
       }
+    }catch(err){
+      console.error(err);
+      viewRoot.innerHTML = `<div class="card"><strong>Erro</strong><div style="margin-top:.5rem;color:var(--muted)">${String(err)}</div></div>`;
     }
   }
 
