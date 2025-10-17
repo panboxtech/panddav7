@@ -1,11 +1,9 @@
 // js/clients/clients-view.js
-// implementação do wizard e lógica conforme regras descritas
 import { createEmptyClient, createEmptyPoint } from './clients-models.js';
 import * as V from './clients-validation.js';
 import clientsService from './clients-service.js';
 
 const ClientsView = (function(){
-  // estado local do formulário
   let state = {
     client: createEmptyClient(),
     editingPointId: null,
@@ -14,253 +12,186 @@ const ClientsView = (function(){
     plansMeta: []
   };
 
-  // referências DOM na view (serão vinculadas quando a view for carregada)
-  let root, formTemplate, pointTemplate, pointItemTemplate;
-  let btnSelectPlan, btnSelectServer1, btnSelectServer2, btnAddPoint;
+  // DOM refs
+  let rootOverlay;
+  let formTemplate, pointTemplate, pointItemTemplate;
   let inputs = {};
 
-  // helpers
-  function q(sel, ctx=root){ return ctx ? ctx.querySelector(sel) : document.querySelector(sel); }
-  function qa(sel, ctx=root){ return Array.from((ctx||document).querySelectorAll(sel)); }
+  function q(sel, ctx=document){ return ctx.querySelector(sel); }
+  function qa(sel, ctx=document){ return Array.from((ctx||document).querySelectorAll(sel)); }
 
   async function init(){
-    try{
-      // carregar metadados
-      clientsService.seedMocksIfEmpty();
-      state.appsMeta = await clientsService.listApps();
-      state.serversMeta = await clientsService.listServers();
-      state.plansMeta = await clientsService.listPlans();
+    // load metadata
+    clientsService.seedMocksIfEmpty();
+    state.appsMeta = await clientsService.listApps();
+    state.serversMeta = await clientsService.listServers();
+    state.plansMeta = await clientsService.listPlans();
 
-      // Certificar que templates do formulário estão no DOM.
-      // Se não estiverem, carregar views/client-form.html e injetar seus templates no document.
-      if(!document.getElementById('clientFormTemplate') || !document.getElementById('pointFormTemplate')){
-        const res = await fetch('./views/client-form.html', { cache: 'no-store' });
-        if(!res.ok) throw new Error(`Falha ao carregar templates: ${res.status}`);
+    // ensure templates in document
+    if(!document.getElementById('clientFormTemplate')){
+      const res = await fetch('./views/client-form.html', { cache:'no-store' });
+      if(res.ok){
         const text = await res.text();
         const tmp = document.createElement('div');
         tmp.innerHTML = text;
-        // mover templates para o body (document) para que possam ser acessados por id
-        const templates = tmp.querySelectorAll('template');
-        templates.forEach(t => document.body.appendChild(t));
+        tmp.querySelectorAll('template').forEach(t => document.body.appendChild(t));
+      } else {
+        throw new Error('Não foi possível carregar templates: ' + res.status);
       }
-
-      // localizar templates agora presentes no DOM
-      formTemplate = document.getElementById('clientFormTemplate');
-      pointTemplate = document.getElementById('pointFormTemplate');
-      pointItemTemplate = document.getElementById('pointItemTemplate');
-
-      if(!formTemplate || !pointTemplate || !pointItemTemplate){
-        throw new Error('Templates do formulário não encontrados após carregamento');
-      }
-
-      // clonar o template principal e anexar ao clientFormRoot existente na view
-      const tpl = formTemplate.content.cloneNode(true);
-      root = document.createElement('div');
-      root.appendChild(tpl);
-
-      const clientFormRoot = document.getElementById('clientFormRoot');
-      if(!clientFormRoot) throw new Error('#clientFormRoot não encontrado na view');
-      clientFormRoot.innerHTML = '';
-      clientFormRoot.appendChild(root);
-      clientFormRoot.classList.remove('hidden');
-      clientFormRoot.setAttribute('aria-hidden','false');
-
-      bindElements();
-      attachHandlers();
-      renderInitial();
-      updateSaveState();
-    }catch(err){
-      console.error('Erro inicializando clientsView:', err);
-      // exibir erro simples no lugar do formulário, sem quebrar o restante da app
-      const clientFormRoot = document.getElementById('clientFormRoot');
-      if(clientFormRoot){
-        clientFormRoot.classList.remove('hidden');
-        clientFormRoot.innerHTML = `<div class="card"><strong>Erro ao carregar formulário</strong><div style="margin-top:.5rem;color:var(--muted)">${String(err)}</div></div>`;
-      }
-      throw err;
     }
+
+    formTemplate = document.getElementById('clientFormTemplate');
+    pointTemplate = document.getElementById('pointFormTemplate');
+    pointItemTemplate = document.getElementById('pointItemTemplate');
+
+    if(!formTemplate) throw new Error('clientFormTemplate ausente');
+
+    openOverlay();
+  }
+
+  function openOverlay(){
+    // create overlay from template and attach to body
+    const clone = formTemplate.content.cloneNode(true);
+    rootOverlay = clone.querySelector('.overlay-modal') || document.createElement('div');
+    document.body.appendChild(clone);
+    // after appended, bind refs inside overlay
+    bindElements();
+    attachHandlers();
+    renderSummaries();
+    updateSaveState();
+    // open default: data expanded, points collapsed
+    setPanelExpanded('panel-data', true);
+    setPanelExpanded('panel-points', false);
   }
 
   function bindElements(){
-    // inputs step1
-    inputs.name = q('#c_name');
-    inputs.phone = q('#c_phone');
-    inputs.email = q('#c_email');
-    inputs.planBtn = q('#btnSelectPlan');
-    inputs.planChip = q('#chipPlan');
-    inputs.dueDate = q('#c_dueDate');
-    inputs.screens = q('#c_screens');
-    inputs.server1Btn = q('#btnSelectServer1');
-    inputs.server1Chip = q('#chipServer1');
-    inputs.server2Btn = q('#btnSelectServer2');
-    inputs.server2Chip = q('#chipServer2');
-    // step navigation
-    inputs.toStep2 = q('#toStep2');
-    inputs.backToStep1 = q('#backToStep1');
-    // points area
-    btnAddPoint = q('#btnAddPoint');
-    inputs.pointsList = q('#pointsList');
-    inputs.quotaServer1 = q('#quotaServer1');
-    inputs.quotaServer2 = q('#quotaServer2');
-    inputs.pointFormRoot = q('#pointFormRoot');
-    inputs.saveBtn = q('#saveClientBtn');
-    // modal controls
-    const closeBtn = q('#closeClientModal');
-    if(closeBtn) closeBtn.addEventListener('click', closeModal);
-    qa('.step').forEach(btn => btn.addEventListener('click', onStepClick));
-    // steppers: local delegation (may be multiple steppers, so selecting by class inside document)
-    qa('.stepper-incr').forEach(b => b.addEventListener('click', () => changeScreens(1)));
-    qa('.stepper-decr').forEach(b => b.addEventListener('click', () => changeScreens(-1)));
+    inputs.overlay = document.querySelector('.overlay-modal');
+    inputs.closeBtn = q('#closeClientModal', inputs.overlay);
+    inputs.cancelClientBtn = q('#cancelClientBtn', inputs.overlay);
+    inputs.saveBtn = q('#saveClientBtn', inputs.overlay);
+    inputs.globalFeedback = q('#globalFeedback', inputs.overlay);
+
+    // panel data refs
+    inputs.c_name = q('#c_name', inputs.overlay);
+    inputs.c_phone = q('#c_phone', inputs.overlay);
+    inputs.c_email = q('#c_email', inputs.overlay);
+    inputs.btnSelectPlan = q('#btnSelectPlan', inputs.overlay);
+    inputs.chipPlan = q('#chipPlan', inputs.overlay);
+    inputs.c_dueDate = q('#c_dueDate', inputs.overlay);
+    inputs.c_screens = q('#c_screens', inputs.overlay);
+    inputs.btnSelectServer1 = q('#btnSelectServer1', inputs.overlay);
+    inputs.chipServer1 = q('#chipServer1', inputs.overlay);
+    inputs.btnSelectServer2 = q('#btnSelectServer2', inputs.overlay);
+    inputs.chipServer2 = q('#chipServer2', inputs.overlay);
+    inputs.summaryName = q('#summaryName', inputs.overlay);
+    inputs.summaryPlan = q('#summaryPlan', inputs.overlay);
+    inputs.summaryScreens = q('#summaryScreens', inputs.overlay);
+    inputs.statusData = q('#statusData', inputs.overlay);
+
+    // panel points refs
+    inputs.btnAddPoint = q('#btnAddPoint', inputs.overlay);
+    inputs.pointsList = q('#pointsList', inputs.overlay);
+    inputs.pointFormRoot = q('#pointFormRoot', inputs.overlay);
+    inputs.quotaServer1 = q('#quotaServer1', inputs.overlay);
+    inputs.quotaServer2 = q('#quotaServer2', inputs.overlay);
+    inputs.pointsBadges = q('#pointsBadges', inputs.overlay);
+    inputs.statusPoints = q('#statusPoints', inputs.overlay);
+
+    // panel headers for toggling
+    inputs.panelDataHeader = q('#panel-data-header', inputs.overlay);
+    inputs.panelPointsHeader = q('#panel-points-header', inputs.overlay);
   }
 
   function attachHandlers(){
-    if(inputs.name) inputs.name.addEventListener('input', onClientInput);
-    if(inputs.phone) inputs.phone.addEventListener('input', onClientInput);
-    if(inputs.email) inputs.email.addEventListener('input', onClientInput);
-    if(inputs.screens) inputs.screens.addEventListener('input', onClientInput);
-    if(inputs.planBtn) inputs.planBtn.addEventListener('click', onSelectPlan);
-    if(inputs.server1Btn) inputs.server1Btn.addEventListener('click', onSelectServer1);
-    if(inputs.server2Btn) inputs.server2Btn.addEventListener('click', onSelectServer2);
-    if(inputs.toStep2) inputs.toStep2.addEventListener('click', gotoStep2);
-    if(inputs.backToStep1) inputs.backToStep1.addEventListener('click', gotoStep1);
-    if(btnAddPoint) btnAddPoint.addEventListener('click', openPointForm);
+    if(inputs.closeBtn) inputs.closeBtn.addEventListener('click', onCancel);
+    if(inputs.cancelClientBtn) inputs.cancelClientBtn.addEventListener('click', onCancel);
     if(inputs.saveBtn) inputs.saveBtn.addEventListener('click', onSaveClient);
-  }
 
-  function renderInitial(){
-    // preencher valores iniciais
-    if(inputs.screens) inputs.screens.value = state.client.screensPerServer || 1;
-    if(inputs.quotaServer1) inputs.quotaServer1.textContent = '0';
-    if(inputs.quotaServer2) inputs.quotaServer2.textContent = '0';
-    renderPointsList();
+    // data panel handlers
+    if(inputs.c_name) inputs.c_name.addEventListener('input', onClientInput);
+    if(inputs.c_phone) inputs.c_phone.addEventListener('input', onClientInput);
+    if(inputs.c_email) inputs.c_email.addEventListener('input', onClientInput);
+    if(inputs.c_screens){
+      inputs.c_screens.addEventListener('input', onClientInput);
+      // stepper buttons inside overlay
+      qa('.stepper-incr', inputs.overlay).forEach(b => b.addEventListener('click', ()=> changeScreens(1)));
+      qa('.stepper-decr', inputs.overlay).forEach(b => b.addEventListener('click', ()=> changeScreens(-1)));
+    }
+    if(inputs.btnSelectPlan) inputs.btnSelectPlan.addEventListener('click', onSelectPlanPrompt);
+    if(inputs.btnSelectServer1) inputs.btnSelectServer1.addEventListener('click', onSelectServer1Prompt);
+    if(inputs.btnSelectServer2) inputs.btnSelectServer2.addEventListener('click', onSelectServer2Prompt);
+
+    // panel expansion toggles
+    if(inputs.panelDataHeader) inputs.panelDataHeader.addEventListener('click', ()=> togglePanel('panel-data'));
+    if(inputs.panelPointsHeader) inputs.panelPointsHeader.addEventListener('click', ()=> togglePanel('panel-points'));
+    // keyboard accessibility
+    if(inputs.panelDataHeader) inputs.panelDataHeader.addEventListener('keydown', (e)=> { if(e.key==='Enter' || e.key===' ') togglePanel('panel-data'); });
+    if(inputs.panelPointsHeader) inputs.panelPointsHeader.addEventListener('keydown', (e)=> { if(e.key==='Enter' || e.key===' ') togglePanel('panel-points'); });
+
+    // points
+    if(inputs.btnAddPoint) inputs.btnAddPoint.addEventListener('click', ()=> openPointForm(null));
   }
 
   function onClientInput(){
-    state.client.name = inputs.name ? inputs.name.value : '';
-    // keep raw phone in input but normalize for storage
-    const rawPhone = inputs.phone ? inputs.phone.value : '';
-    state.client.phone = V.normalizePhone(rawPhone);
-    state.client.email = inputs.email ? inputs.email.value : '';
-    state.client.screensPerServer = inputs.screens ? Number(inputs.screens.value) || 1 : 1;
-    updateDerivedFromPlan();
-    updateQuotasView();
+    state.client.name = inputs.c_name ? inputs.c_name.value : '';
+    if(inputs.c_phone) state.client.phone = V.normalizePhone(inputs.c_phone.value);
+    state.client.email = inputs.c_email ? inputs.c_email.value : '';
+    state.client.screensPerServer = inputs.c_screens ? Number(inputs.c_screens.value) || 1 : 1;
+    if(inputs.c_dueDate) state.client.dueDate = inputs.c_dueDate.value;
+    // live summary
+    renderSummaries();
     validateStep1();
     updateSaveState();
   }
 
-  function updateDerivedFromPlan(){
-    if(state.client.planId){
-      const plan = state.plansMeta.find(p=>p.id === state.client.planId);
-      if(plan && plan.months && inputs.dueDate){
-        const due = new Date();
-        due.setMonth(due.getMonth() + plan.months);
-        const iso = due.toISOString().slice(0,10);
-        inputs.dueDate.value = iso;
-        state.client.dueDate = iso;
-      }
-    }
-  }
-
   function changeScreens(delta){
-    if(!inputs.screens) return;
-    const cur = Number(inputs.screens.value) || 1;
-    const next = Math.max(1, cur + delta);
-    inputs.screens.value = next;
+    if(!inputs.c_screens) return;
+    const cur = Number(inputs.c_screens.value) || 1;
+    inputs.c_screens.value = Math.max(1, cur + delta);
     onClientInput();
   }
 
-  async function onSelectPlan(){
-    const options = state.plansMeta.map(p=>`${p.id}: ${p.name} (${p.months}m)`).join('\n');
-    const pick = prompt(`Escolha plano:\n${options}`);
-    if(!pick) return;
-    const id = pick.split(':')[0].trim();
-    const plan = state.plansMeta.find(p=>p.id===id);
-    if(plan){
-      state.client.planId = plan.id;
-      if(inputs.planChip) { inputs.planChip.textContent = `${plan.name} • ${plan.months}m`; inputs.planChip.setAttribute('aria-hidden','false'); }
-      updateDerivedFromPlan();
-      validateStep1();
-      updateSaveState();
+  function renderSummaries(){
+    inputs.summaryName && (inputs.summaryName.textContent = state.client.name ? state.client.name : '—');
+    const planLabel = state.plansMeta.find(p=>p.id===state.client.planId)?.name || '—';
+    inputs.summaryPlan && (inputs.summaryPlan.textContent = planLabel);
+    inputs.summaryScreens && (inputs.summaryScreens.textContent = `Telas: ${state.client.screensPerServer || 1}`);
+    // points badges
+    if(state.client.points && state.client.points.length){
+      inputs.pointsBadges.innerHTML = '';
+      state.client.points.forEach(p=>{
+        const appName = state.appsMeta.find(a=>a.id===p.appId)?.name || p.appId;
+        const b = document.createElement('span');
+        b.className = 'badge';
+        b.textContent = `${appName} · ${p.conns}`;
+        inputs.pointsBadges.appendChild(b);
+      });
     } else {
-      alert('Plano não encontrado');
+      inputs.pointsBadges.textContent = 'Nenhum ponto';
     }
-  }
-
-  async function onSelectServer1(){
-    const options = state.serversMeta.map(s=>`${s.id}: ${s.name}`).join('\n');
-    const pick = prompt(`Escolha Servidor1:\n${options}`);
-    if(!pick) return;
-    const id = pick.split(':')[0].trim();
-    const server = state.serversMeta.find(s=>s.id===id);
-    if(server){
-      state.client.server1Id = server.id;
-      if(inputs.server1Chip){ inputs.server1Chip.textContent = server.name; inputs.server1Chip.setAttribute('aria-hidden','false'); }
-      if(state.client.server2Id === server.id){
-        state.client.server2Id = null;
-        if(inputs.server2Chip){ inputs.server2Chip.textContent=''; inputs.server2Chip.setAttribute('aria-hidden','true'); }
-      }
-      validateStep1();
-      updateQuotasView();
-      updateSaveState();
-    }
-  }
-
-  async function onSelectServer2(){
-    const available = state.serversMeta.filter(s => s.id !== state.client.server1Id);
-    if(available.length === 0){ alert('Nenhum servidor adicional disponível'); return; }
-    const options = available.map(s=>`${s.id}: ${s.name}`).join('\n');
-    const pick = prompt(`Escolha Servidor2:\n${options}`);
-    if(!pick) return;
-    const id = pick.split(':')[0].trim();
-    const server = available.find(s=>s.id===id);
-    if(server){
-      state.client.server2Id = server.id;
-      if(inputs.server2Chip){ inputs.server2Chip.textContent = server.name; inputs.server2Chip.setAttribute('aria-hidden','false'); }
-      validateStep1();
-      updateQuotasView();
-      updateSaveState();
-    }
+    updateQuotasView();
   }
 
   function validateStep1(){
     const nameV = V.validateName(state.client.name);
-    const phoneV = V.validatePhoneRaw(inputs.phone ? inputs.phone.value : '');
+    const phoneV = V.validatePhoneRaw(inputs.c_phone ? inputs.c_phone.value : '');
     const emailV = V.validateEmail(state.client.email);
-    const screensV = V.validateScreens(inputs.screens ? inputs.screens.value : 1);
-    const dueV = V.validateDueDate(inputs.dueDate ? inputs.dueDate.value : null);
+    const screensV = V.validateScreens(inputs.c_screens ? inputs.c_screens.value : 1);
+    const dueV = V.validateDueDate(inputs.c_dueDate ? inputs.c_dueDate.value : null);
 
-    if(document.getElementById('err_name')) document.getElementById('err_name').textContent = nameV.ok ? '' : nameV.msg;
-    if(document.getElementById('err_phone')) document.getElementById('err_phone').textContent = phoneV.ok ? '' : phoneV.msg;
-    if(document.getElementById('err_email')) document.getElementById('err_email').textContent = emailV.ok ? '' : emailV.msg;
-    if(document.getElementById('err_screens')) document.getElementById('err_screens').textContent = screensV.ok ? '' : screensV.msg;
-    if(document.getElementById('err_dueDate')) document.getElementById('err_dueDate').textContent = dueV.ok ? '' : dueV.msg;
-    if(document.getElementById('err_plan')) document.getElementById('err_plan').textContent = state.client.planId ? '' : 'Plano obrigatório';
-    if(document.getElementById('err_server1')) document.getElementById('err_server1').textContent = state.client.server1Id ? '' : 'Servidor1 obrigatório';
+    q('#err_name', inputs.overlay) && (q('#err_name', inputs.overlay).textContent = nameV.ok ? '' : nameV.msg);
+    q('#err_phone', inputs.overlay) && (q('#err_phone', inputs.overlay).textContent = phoneV.ok ? '' : phoneV.msg);
+    q('#err_email', inputs.overlay) && (q('#err_email', inputs.overlay).textContent = emailV.ok ? '' : emailV.msg);
+    q('#err_screens', inputs.overlay) && (q('#err_screens', inputs.overlay).textContent = screensV.ok ? '' : screensV.msg);
+    q('#err_dueDate', inputs.overlay) && (q('#err_dueDate', inputs.overlay).textContent = dueV.ok ? '' : dueV.msg);
+    q('#err_plan', inputs.overlay) && (q('#err_plan', inputs.overlay).textContent = state.client.planId ? '' : 'Plano obrigatório');
+    q('#err_server1', inputs.overlay) && (q('#err_server1', inputs.overlay).textContent = state.client.server1Id ? '' : 'Servidor1 obrigatório');
 
-    const ok = nameV.ok && phoneV.ok && emailV.ok && screensV.ok && dueV.ok && !!state.client.planId && !!state.client.server1Id;
-    if(inputs.toStep2) inputs.toStep2.disabled = !ok;
-  }
-
-  function gotoStep2(){
-    qa('.step').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected','false'); });
-    const s2 = document.querySelector('.step[data-step="2"]'); if(s2) { s2.classList.add('active'); s2.setAttribute('aria-selected','true'); }
-    const panel1 = document.querySelector('.step-panel[data-step="1"]');
-    const panel2 = document.querySelector('.step-panel[data-step="2"]');
-    if(panel1) { panel1.classList.add('hidden'); panel1.setAttribute('aria-hidden','true'); }
-    if(panel2) { panel2.classList.remove('hidden'); panel2.setAttribute('aria-hidden','false'); }
-    updateQuotasView();
-    renderPointsList();
-    updateSaveState();
-  }
-
-  function gotoStep1(){
-    qa('.step').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected','false'); });
-    const s1 = document.querySelector('.step[data-step="1"]'); if(s1) { s1.classList.add('active'); s1.setAttribute('aria-selected','true'); }
-    const panel1 = document.querySelector('.step-panel[data-step="1"]');
-    const panel2 = document.querySelector('.step-panel[data-step="2"]');
-    if(panel2) { panel2.classList.add('hidden'); panel2.setAttribute('aria-hidden','true'); }
-    if(panel1) { panel1.classList.remove('hidden'); panel1.setAttribute('aria-hidden','false'); }
-    updateSaveState();
+    // show header hint for data panel
+    if(inputs.statusData) {
+      const ok = nameV.ok && phoneV.ok && emailV.ok && screensV.ok && dueV.ok && !!state.client.planId && !!state.client.server1Id;
+      inputs.statusData.textContent = ok ? '' : 'Preencha os campos obrigatórios';
+    }
   }
 
   function updateQuotasView(){
@@ -268,102 +199,158 @@ const ClientsView = (function(){
     const s1id = state.client.server1Id;
     const s2id = state.client.server2Id;
     const screens = state.client.screensPerServer || 1;
-    if(inputs.quotaServer1) inputs.quotaServer1.textContent = `${sums[s1id] || 0} / ${screens}`;
+    if(inputs.quotaServer1) inputs.quotaServer1.textContent = s1id ? `${sums[s1id] || 0} / ${screens}` : '-';
     if(inputs.quotaServer2) inputs.quotaServer2.textContent = s2id ? `${sums[s2id] || 0} / ${screens}` : '-';
+    // header hint for points
+    if(inputs.statusPoints){
+      // if any server sums exceed screens show warning
+      let warn = '';
+      if(s1id && (sums[s1id]||0) > screens) warn = 'Quota excedida Servidor1';
+      if(s2id && (sums[s2id]||0) > screens) warn = (warn ? warn + '; ' : '') + 'Quota excedida Servidor2';
+      inputs.statusPoints.textContent = warn;
+    }
   }
 
-  // ponto CRUD
+  // panel expand/collapse helpers
+  function setPanelExpanded(panelId, expanded){
+    const header = q(`#${panelId}-header`);
+    const body = q(`#${panelId}-body`);
+    if(!header || !body) return;
+    header.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    if(expanded){ body.classList.remove('hidden'); header.focus(); } else { body.classList.add('hidden'); }
+  }
+  function togglePanel(panelId){
+    const header = q(`#${panelId}-header`);
+    const expanded = header && header.getAttribute('aria-expanded') === 'true';
+    setPanelExpanded(panelId, !expanded);
+    // scroll into view on expand for mobile
+    if(!expanded) { q(`#${panelId}-header`).scrollIntoView({behavior:'smooth', block:'center'}); }
+  }
+
+  // selection prompts (for prototype) - same UX as before but allow replacement with modals
+  async function onSelectPlanPrompt(){
+    const options = state.plansMeta.map(p=>`${p.id}: ${p.name} (${p.months}m)`).join('\n');
+    const pick = prompt(`Escolha plano:\n${options}`);
+    if(!pick) return;
+    const id = pick.split(':')[0].trim();
+    const plan = state.plansMeta.find(p=>p.id===id);
+    if(plan){
+      state.client.planId = plan.id;
+      if(inputs.chipPlan){ inputs.chipPlan.textContent = `${plan.name} • ${plan.months}m`; inputs.chipPlan.setAttribute('aria-hidden','false'); }
+      // auto suggest due date
+      const due = new Date(); due.setMonth(due.getMonth() + (plan.months || 0));
+      inputs.c_dueDate && (inputs.c_dueDate.value = due.toISOString().slice(0,10));
+      state.client.dueDate = inputs.c_dueDate.value;
+      renderSummaries();
+      validateStep1();
+      updateSaveState();
+    }
+  }
+
+  async function onSelectServer1Prompt(){
+    const options = state.serversMeta.map(s=>`${s.id}: ${s.name}`).join('\n');
+    const pick = prompt(`Escolha Servidor1:\n${options}`);
+    if(!pick) return;
+    const id = pick.split(':')[0].trim();
+    const server = state.serversMeta.find(s=>s.id===id);
+    if(server){
+      state.client.server1Id = server.id;
+      if(inputs.chipServer1){ inputs.chipServer1.textContent = server.name; inputs.chipServer1.setAttribute('aria-hidden','false'); }
+      if(state.client.server2Id === server.id){ state.client.server2Id = null; if(inputs.chipServer2){ inputs.chipServer2.textContent=''; inputs.chipServer2.setAttribute('aria-hidden','true'); } }
+      renderSummaries(); validateStep1(); updateSaveState();
+    }
+  }
+
+  async function onSelectServer2Prompt(){
+    const available = state.serversMeta.filter(s => s.id !== state.client.server1Id);
+    if(available.length===0){ alert('Nenhum servidor adicional disponível'); return; }
+    const options = available.map(s=>`${s.id}: ${s.name}`).join('\n');
+    const pick = prompt(`Escolha Servidor2:\n${options}`);
+    if(!pick) return;
+    const id = pick.split(':')[0].trim();
+    const server = available.find(s=>s.id===id);
+    if(server){ state.client.server2Id = server.id; if(inputs.chipServer2){ inputs.chipServer2.textContent = server.name; inputs.chipServer2.setAttribute('aria-hidden','false'); } renderSummaries(); validateStep1(); updateSaveState(); }
+  }
+
+  // Points CRUD with select for app and server
   function openPointForm(editPoint=null){
     const clone = pointTemplate.content.cloneNode(true);
     const formEl = clone.querySelector('.point-form');
-    const sel = formEl.querySelector('#p_server');
-    // preencher opções de servidor
-    sel.innerHTML = '';
-    const servers = prepareServerOptionsForPoint();
-    servers.forEach(s => {
-      const opt = document.createElement('option');
-      opt.value = s.id; opt.textContent = s.name; sel.appendChild(opt);
+
+    // populate server select
+    const selServer = formEl.querySelector('#p_server');
+    selServer.innerHTML = '';
+    const serverOptions = prepareServerOptionsForPoint();
+    serverOptions.forEach(s => {
+      const opt = document.createElement('option'); opt.value = s.id; opt.textContent = s.name; selServer.appendChild(opt);
     });
 
+    // populate app select
+    const selApp = formEl.querySelector('#p_app');
+    selApp.innerHTML = '';
+    state.appsMeta.forEach(a => {
+      const opt = document.createElement('option'); opt.value = a.id; opt.textContent = a.name + (a.multiplosAcessos ? '' : ' (exclusivo)');
+      selApp.appendChild(opt);
+    });
+
+    // prefill when editing
     if(editPoint){
       state.editingPointId = editPoint.id;
+      selServer.value = editPoint.serverId;
+      selApp.value = editPoint.appId;
       formEl.querySelector('#p_conns').value = editPoint.conns;
       formEl.querySelector('#p_user').value = editPoint.user;
       formEl.querySelector('#p_pass').value = editPoint.pass;
-      sel.value = editPoint.serverId;
-      const appMeta = state.appsMeta.find(a=>a.id===editPoint.appId);
-      if(appMeta) formEl.querySelector('#chipApp').textContent = appMeta.name;
       formEl.querySelector('#pointFormTitle').textContent = 'Editar Ponto';
-      formEl.dataset.appid = editPoint.appId;
     } else {
       state.editingPointId = null;
       const pre = selectPreServerForNewPoint();
-      if(pre) sel.value = pre.id;
+      if(pre) selServer.value = pre.id;
       formEl.querySelector('#pointFormTitle').textContent = 'Novo Ponto';
+      formEl.querySelector('#p_conns').value = 1;
+      formEl.querySelector('#p_user').value = '';
+      formEl.querySelector('#p_pass').value = '';
     }
 
-    const btnSelectAppLocal = formEl.querySelector('#btnSelectApp');
-    const chipApp = formEl.querySelector('#chipApp');
+    // apply app rules on change
     const inputConns = formEl.querySelector('#p_conns');
-    const stepDec = formEl.querySelector('.stepper-decr');
-    const stepInc = formEl.querySelector('.stepper-incr');
-    const btnCancel = formEl.querySelector('#cancelPointBtn');
-    const btnAdd = formEl.querySelector('#addPointBtn');
-
-    btnSelectAppLocal.addEventListener('click', async ()=>{
-      const options = state.appsMeta.map(a=>`${a.id}: ${a.name} (mult:${a.multiplosAcessos})`).join('\n');
-      const pick = prompt(`Escolha App:\n${options}`);
-      if(!pick) return;
-      const id = pick.split(':')[0].trim();
-      const meta = state.appsMeta.find(a=>a.id===id);
-      if(meta){
-        formEl.dataset.appid = meta.id;
-        chipApp.textContent = meta.name;
-        chipApp.setAttribute('aria-hidden','false');
-        if(meta.multiplosAcessos === false){
-          inputConns.value = 1;
-          inputConns.setAttribute('disabled','true');
-        } else {
-          inputConns.removeAttribute('disabled');
-        }
+    selApp.addEventListener('change', ()=>{
+      const meta = state.appsMeta.find(a => a.id === selApp.value);
+      if(meta && meta.multiplosAcessos === false){
+        inputConns.value = 1; inputConns.setAttribute('disabled','true');
+        q('#err_p_conns', formEl) && (q('#err_p_conns', formEl).textContent = 'App exclusivo: conexões fixas em 1');
+      } else {
+        inputConns.removeAttribute('disabled');
+        q('#err_p_conns', formEl) && (q('#err_p_conns', formEl).textContent = '');
       }
     });
 
-    stepDec.addEventListener('click', ()=> {
-      const cur = Math.max(1, Number(inputConns.value || 1)-1);
-      inputConns.value = cur;
-    });
-    stepInc.addEventListener('click', ()=> {
-      const cur = Math.max(1, Number(inputConns.value || 1)+1);
-      inputConns.value = cur;
-    });
+    // steppers
+    formEl.querySelector('.stepper-decr').addEventListener('click', ()=> { inputConns.value = Math.max(1, Number(inputConns.value||1)-1); });
+    formEl.querySelector('.stepper-incr').addEventListener('click', ()=> { inputConns.value = Math.max(1, Number(inputConns.value||1)+1); });
 
-    btnCancel.addEventListener('click', ()=> {
+    // cancel/add handlers
+    formEl.querySelector('#cancelPointBtn').addEventListener('click', ()=> {
       state.editingPointId = null;
-      inputs.pointFormRoot.classList.add('hidden');
-      inputs.pointFormRoot.innerHTML = '';
-      updateQuotasView();
-      updateSaveState();
+      inputs.pointFormRoot.classList.add('hidden'); inputs.pointFormRoot.innerHTML = '';
+      updateQuotasView(); updateSaveState();
     });
 
-    btnAdd.addEventListener('click', async ()=>{
+    formEl.querySelector('#addPointBtn').addEventListener('click', ()=> {
       const point = {
         id: state.editingPointId || ('p_' + Date.now().toString(36)),
-        serverId: sel.value,
-        appId: formEl.dataset.appid || null,
+        serverId: selServer.value,
+        appId: selApp.value || null,
         conns: Number(inputConns.value || 1),
         user: formEl.querySelector('#p_user').value.trim(),
         pass: formEl.querySelector('#p_pass').value
       };
 
-      const appMeta = state.appsMeta.find(a=>a.id === point.appId);
+      const appMeta = state.appsMeta.find(a => a.id === point.appId);
       const existing = state.client.points.filter(p => p.serverId === point.serverId && p.id !== point.id);
 
       const valid = V.validatePointLocal(point, appMeta, state.client.screensPerServer, existing);
-      if(!valid.ok){
-        formEl.querySelector('#err_p_conns').textContent = valid.msg;
-        return;
-      }
+      if(!valid.ok){ q('#err_p_conns', formEl) && (q('#err_p_conns', formEl).textContent = valid.msg); return; }
 
       if(appMeta && appMeta.multiplosAcessos === false){
         const dup = state.client.points.find(p => p.appId === point.appId && p.user === point.user && p.id !== point.id);
@@ -383,12 +370,17 @@ const ClientsView = (function(){
       renderPointsList();
       updateQuotasView();
       updateSaveState();
+      renderSummaries();
     });
 
+    // show point form
     inputs.pointFormRoot.innerHTML = '';
     inputs.pointFormRoot.appendChild(clone);
     inputs.pointFormRoot.classList.remove('hidden');
     inputs.pointFormRoot.setAttribute('aria-hidden','false');
+
+    // trigger change to apply app rule initial state
+    selApp.dispatchEvent(new Event('change'));
   }
 
   function prepareServerOptionsForPoint(){
@@ -414,14 +406,10 @@ const ClientsView = (function(){
   function renderPointsList(){
     inputs.pointsList.innerHTML = '';
     if(state.client.points.length === 0){
-      const empty = document.createElement('div');
-      empty.className = 'card';
-      empty.textContent = 'Nenhum ponto adicionado';
-      inputs.pointsList.appendChild(empty);
-      return;
+      const empty = document.createElement('div'); empty.className = 'card'; empty.textContent = 'Nenhum ponto adicionado'; inputs.pointsList.appendChild(empty); return;
     }
 
-    for(const p of state.client.points){
+    state.client.points.forEach(p=>{
       const clone = pointItemTemplate.content.cloneNode(true);
       const item = clone.querySelector('.point-item');
       item.dataset.id = p.id;
@@ -429,7 +417,8 @@ const ClientsView = (function(){
       item.querySelector('.point-app').textContent = state.appsMeta.find(a=>a.id===p.appId)?.name || p.appId;
       item.querySelector('.point-conns').textContent = `Conexões: ${p.conns}`;
       item.querySelector('.point-user').textContent = `Usuário: ${p.user}`;
-      item.querySelector('.point-pass').textContent = `Senha: ${p.pass ? '●●●●●' : ''}`;
+      // senha exibida em texto claro conforme solicitado
+      item.querySelector('.point-pass').textContent = `Senha: ${p.pass || ''}`;
 
       item.querySelector('.edit-point').addEventListener('click', ()=> openPointForm(p));
       item.querySelector('.remove-point').addEventListener('click', ()=> {
@@ -438,17 +427,18 @@ const ClientsView = (function(){
         renderPointsList();
         updateQuotasView();
         updateSaveState();
+        renderSummaries();
       });
 
       inputs.pointsList.appendChild(clone);
-    }
+    });
   }
 
   async function updateSaveState(){
     const nameV = V.validateName(state.client.name);
     const phoneV = V.validatePhoneRaw(state.client.phone);
     const screensV = V.validateScreens(state.client.screensPerServer);
-    const dueV = V.validateDueDate(inputs.dueDate ? inputs.dueDate.value : null);
+    const dueV = V.validateDueDate(inputs.c_dueDate ? inputs.c_dueDate.value : null);
     const planSelected = !!state.client.planId;
     const server1Selected = !!state.client.server1Id;
 
@@ -458,28 +448,27 @@ const ClientsView = (function(){
     const screens = state.client.screensPerServer || 1;
 
     let quotaExact = true;
-    if(s1id){
-      if((sums[s1id] || 0) !== screens) quotaExact = false;
-    }
-    if(s2id){
-      if((sums[s2id] || 0) !== screens) quotaExact = false;
-    } else {
-      if(s1id && (sums[s1id] || 0) !== screens) quotaExact = false;
-    }
+    if(s1id){ if((sums[s1id] || 0) !== screens) quotaExact = false; }
+    if(s2id){ if((sums[s2id] || 0) !== screens) quotaExact = false; }
+    else { if(s1id && (sums[s1id] || 0) !== screens) quotaExact = false; }
 
     const localUnique = V.checkLocalUniqueAppUser(state.client.points);
-
     const enable = nameV.ok && phoneV.ok && screensV.ok && dueV.ok && planSelected && server1Selected && quotaExact && localUnique.ok;
     if(inputs.saveBtn) inputs.saveBtn.disabled = !enable;
+
+    // feedback for user
+    if(!localUnique.ok && inputs.globalFeedback) inputs.globalFeedback.textContent = localUnique.msg;
+    else inputs.globalFeedback.textContent = '';
   }
 
   async function onSaveClient(){
+    inputs.globalFeedback && (inputs.globalFeedback.textContent = 'Validando e salvando...');
     const payload = {
       name: state.client.name.trim(),
-      phone: V.normalizePhone(inputs.phone ? inputs.phone.value : ''),
+      phone: V.normalizePhone(inputs.c_phone ? inputs.c_phone.value : ''),
       email: state.client.email ? state.client.email.trim() : null,
       planId: state.client.planId,
-      dueDate: inputs.dueDate ? inputs.dueDate.value : null,
+      dueDate: inputs.c_dueDate ? inputs.c_dueDate.value : null,
       screensPerServer: state.client.screensPerServer,
       server1Id: state.client.server1Id,
       server2Id: state.client.server2Id,
@@ -491,31 +480,27 @@ const ClientsView = (function(){
       const res = await clientsService.persistClientTransaction({ mode:'create', clientPayload:payload });
       if(res && res.success){
         alert('Cliente salvo com sucesso');
-        closeModal();
+        closeOverlay();
+        // ideally refresh list outside (UI integration)
       } else {
         throw new Error('Falha ao salvar');
       }
     }catch(err){
       alert('Erro ao salvar: ' + (err.message || String(err)));
       if(inputs.saveBtn) inputs.saveBtn.disabled = false;
+      inputs.globalFeedback && (inputs.globalFeedback.textContent = 'Erro: ' + (err.message || String(err)));
     }
   }
 
-  function closeModal(){
-    const clientFormRoot = document.getElementById('clientFormRoot');
-    if(clientFormRoot){
-      clientFormRoot.classList.add('hidden');
-      clientFormRoot.setAttribute('aria-hidden','true');
-      clientFormRoot.innerHTML = '';
-    }
+  function onCancel(){
+    if(confirm('Fechar sem salvar? Alterações serão perdidas.')) closeOverlay();
+  }
+
+  function closeOverlay(){
+    const overlay = document.querySelector('.overlay-modal');
+    if(overlay) overlay.remove();
+    // reset state
     state = { client: createEmptyClient(), editingPointId: null, appsMeta: state.appsMeta, serversMeta: state.serversMeta, plansMeta: state.plansMeta };
-  }
-
-  // small handler for clicking step buttons
-  function onStepClick(e){
-    const step = e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.step;
-    if(step === '1') gotoStep1();
-    if(step === '2') gotoStep2();
   }
 
   return { init };
