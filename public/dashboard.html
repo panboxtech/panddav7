@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Streaming — Dashboard</title>
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/dashboard.css" />
+  <link rel="stylesheet" href="css/clients.css" />
+</head>
+<body>
+  <div id="app" class="app-root" data-view="clients">
+    <aside id="sidebar" class="sidebar expanded">
+      <div class="brand">StreamAdmin</div>
+      <nav class="menu" role="navigation" aria-label="Menu principal">
+        <button class="menu-item" data-view="clients">Clientes</button>
+      </nav>
+      <div class="sidebar-controls">
+        <button id="toggleSidebar" class="icon-btn" aria-pressed="false" title="Minimizar/Expandir">⇔</button>
+      </div>
+    </aside>
+
+    <div class="main-area">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button id="mobileMenuBtn" class="icon-btn hide-desktop" aria-label="Abrir menu">☰</button>
+          <h2 id="viewTitle">Clientes</h2>
+        </div>
+        <div class="topbar-right">
+          <button id="logoutBtn" class="btn-ghost">Sair</button>
+        </div>
+      </header>
+
+      <section id="viewRoot" class="view-root" aria-live="polite">
+        <!-- Views carregadas via JS (templates seguros) -->
+      </section>
+    </div>
+
+    <div id="overlay" class="overlay hidden" tabindex="-1"></div>
+  </div>
+
+  <script type="module" src="js/ui.js"></script>
+  <script type="module" src="js/clients/clients-service.js"></script>
+  <script type="module" src="js/clients/clients-view.js"></script>
+</body>
+</html>
