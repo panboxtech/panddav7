@@ -4,9 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Streaming — Dashboard</title>
-  <link rel="stylesheet" href="css/base.css" />
-  <link rel="stylesheet" href="css/dashboard.css" />
-  <link rel="stylesheet" href="css/clients.css" />
+  <link rel="stylesheet" href="./css/base.css" />
+  <link rel="stylesheet" href="./css/dashboard.css" />
+  <link rel="stylesheet" href="./css/clients.css" />
 </head>
 <body>
   <div id="app" class="app-root" data-view="clients">
@@ -23,7 +23,7 @@
     <div class="main-area">
       <header class="topbar">
         <div class="topbar-left">
-          <button id="mobileMenuBtn" class="icon-btn hide-desktop" aria-label="Abrir menu">☰</button>
+          <button id="mobileMenuBtn" class="icon-btn mobile-menu-btn hide-desktop" aria-label="Abrir menu" aria-expanded="false" type="button">☰</button>
           <h2 id="viewTitle">Clientes</h2>
         </div>
         <div class="topbar-right">
@@ -39,8 +39,8 @@
     <div id="overlay" class="overlay hidden" tabindex="-1"></div>
   </div>
 
-  <script type="module" src="js/ui.js"></script>
-  <script type="module" src="js/clients/clients-service.js"></script>
-  <script type="module" src="js/clients/clients-view.js"></script>
+  <script type="module" src="./js/ui.js"></script>
+  <script type="module" src="./js/clients/clients-service.js"></script>
+  <script type="module" src="./js/clients/clients-view.js"></script>
 </body>
 </html>
