@@ -1,4 +1,6 @@
 // js/clients/clients-view.js
+// Wizard/modal de cliente com painéis expansíveis, seleção de servers/apps,
+// validações, bloqueio de scroll do body e comportamento mobile-friendly.
 import { createEmptyClient, createEmptyPoint } from './clients-models.js';
 import * as V from './clients-validation.js';
 import clientsService from './clients-service.js';
@@ -13,31 +15,27 @@ const ClientsView = (function(){
   };
 
   // DOM refs
-  let rootOverlay;
   let formTemplate, pointTemplate, pointItemTemplate;
   let inputs = {};
 
-  function q(sel, ctx=document){ return ctx.querySelector(sel); }
+  function q(sel, ctx=document){ return ctx ? ctx.querySelector(sel) : document.querySelector(sel); }
   function qa(sel, ctx=document){ return Array.from((ctx||document).querySelectorAll(sel)); }
 
   async function init(){
-    // load metadata
+    // carregar metadados
     clientsService.seedMocksIfEmpty();
     state.appsMeta = await clientsService.listApps();
     state.serversMeta = await clientsService.listServers();
     state.plansMeta = await clientsService.listPlans();
 
-    // ensure templates in document
+    // garantir templates no DOM
     if(!document.getElementById('clientFormTemplate')){
       const res = await fetch('./views/client-form.html', { cache:'no-store' });
-      if(res.ok){
-        const text = await res.text();
-        const tmp = document.createElement('div');
-        tmp.innerHTML = text;
-        tmp.querySelectorAll('template').forEach(t => document.body.appendChild(t));
-      } else {
-        throw new Error('Não foi possível carregar templates: ' + res.status);
-      }
+      if(!res.ok) throw new Error('Falha ao carregar templates: ' + res.status);
+      const text = await res.text();
+      const tmp = document.createElement('div');
+      tmp.innerHTML = text;
+      tmp.querySelectorAll('template').forEach(t => document.body.appendChild(t));
     }
 
     formTemplate = document.getElementById('clientFormTemplate');
@@ -50,56 +48,73 @@ const ClientsView = (function(){
   }
 
   function openOverlay(){
-    // create overlay from template and attach to body
+    // clonar e anexar overlay
     const clone = formTemplate.content.cloneNode(true);
-    rootOverlay = clone.querySelector('.overlay-modal') || document.createElement('div');
     document.body.appendChild(clone);
-    // after appended, bind refs inside overlay
+
+    // lock scroll do body
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+
+    // bind e handlers
     bindElements();
     attachHandlers();
+
+    // render inicial
     renderSummaries();
+    renderPointsList();
+    updateQuotasView();
+    validateStep1();
     updateSaveState();
-    // open default: data expanded, points collapsed
+
+    // abrir com data expandido por padrão
     setPanelExpanded('panel-data', true);
     setPanelExpanded('panel-points', false);
+
+    // focusin handler para garantir visibilidade do input no mobile (ajusta scroll)
+    const overlay = document.querySelector('.overlay-modal');
+    if(overlay){
+      overlay.addEventListener('focusin', onFocusInHandler, { passive: true });
+    }
   }
 
   function bindElements(){
-    inputs.overlay = document.querySelector('.overlay-modal');
-    inputs.closeBtn = q('#closeClientModal', inputs.overlay);
-    inputs.cancelClientBtn = q('#cancelClientBtn', inputs.overlay);
-    inputs.saveBtn = q('#saveClientBtn', inputs.overlay);
-    inputs.globalFeedback = q('#globalFeedback', inputs.overlay);
+    const overlay = document.querySelector('.overlay-modal');
+    inputs.overlay = overlay;
+    inputs.closeBtn = q('#closeClientModal', overlay);
+    inputs.cancelClientBtn = q('#cancelClientBtn', overlay);
+    inputs.saveBtn = q('#saveClientBtn', overlay);
+    inputs.globalFeedback = q('#globalFeedback', overlay);
 
-    // panel data refs
-    inputs.c_name = q('#c_name', inputs.overlay);
-    inputs.c_phone = q('#c_phone', inputs.overlay);
-    inputs.c_email = q('#c_email', inputs.overlay);
-    inputs.btnSelectPlan = q('#btnSelectPlan', inputs.overlay);
-    inputs.chipPlan = q('#chipPlan', inputs.overlay);
-    inputs.c_dueDate = q('#c_dueDate', inputs.overlay);
-    inputs.c_screens = q('#c_screens', inputs.overlay);
-    inputs.btnSelectServer1 = q('#btnSelectServer1', inputs.overlay);
-    inputs.chipServer1 = q('#chipServer1', inputs.overlay);
-    inputs.btnSelectServer2 = q('#btnSelectServer2', inputs.overlay);
-    inputs.chipServer2 = q('#chipServer2', inputs.overlay);
-    inputs.summaryName = q('#summaryName', inputs.overlay);
-    inputs.summaryPlan = q('#summaryPlan', inputs.overlay);
-    inputs.summaryScreens = q('#summaryScreens', inputs.overlay);
-    inputs.statusData = q('#statusData', inputs.overlay);
+    // panel data
+    inputs.c_name = q('#c_name', overlay);
+    inputs.c_phone = q('#c_phone', overlay);
+    inputs.c_email = q('#c_email', overlay);
+    inputs.btnSelectPlan = q('#btnSelectPlan', overlay);
+    inputs.chipPlan = q('#chipPlan', overlay);
+    inputs.c_dueDate = q('#c_dueDate', overlay);
+    inputs.c_screens = q('#c_screens', overlay);
+    inputs.btnSelectServer1 = q('#btnSelectServer1', overlay);
+    inputs.chipServer1 = q('#chipServer1', overlay);
+    inputs.btnSelectServer2 = q('#btnSelectServer2', overlay);
+    inputs.chipServer2 = q('#chipServer2', overlay);
+    inputs.summaryName = q('#summaryName', overlay);
+    inputs.summaryPlan = q('#summaryPlan', overlay);
+    inputs.summaryScreens = q('#summaryScreens', overlay);
+    inputs.statusData = q('#statusData', overlay);
 
-    // panel points refs
-    inputs.btnAddPoint = q('#btnAddPoint', inputs.overlay);
-    inputs.pointsList = q('#pointsList', inputs.overlay);
-    inputs.pointFormRoot = q('#pointFormRoot', inputs.overlay);
-    inputs.quotaServer1 = q('#quotaServer1', inputs.overlay);
-    inputs.quotaServer2 = q('#quotaServer2', inputs.overlay);
-    inputs.pointsBadges = q('#pointsBadges', inputs.overlay);
-    inputs.statusPoints = q('#statusPoints', inputs.overlay);
+    // panel points
+    inputs.btnAddPoint = q('#btnAddPoint', overlay);
+    inputs.pointsList = q('#pointsList', overlay);
+    inputs.pointFormRoot = q('#pointFormRoot', overlay);
+    inputs.quotaServer1 = q('#quotaServer1', overlay);
+    inputs.quotaServer2 = q('#quotaServer2', overlay);
+    inputs.pointsBadges = q('#pointsBadges', overlay);
+    inputs.statusPoints = q('#statusPoints', overlay);
 
-    // panel headers for toggling
-    inputs.panelDataHeader = q('#panel-data-header', inputs.overlay);
-    inputs.panelPointsHeader = q('#panel-points-header', inputs.overlay);
+    // headers
+    inputs.panelDataHeader = q('#panel-data-header', overlay);
+    inputs.panelPointsHeader = q('#panel-points-header', overlay);
   }
 
   function attachHandlers(){
@@ -107,24 +122,24 @@ const ClientsView = (function(){
     if(inputs.cancelClientBtn) inputs.cancelClientBtn.addEventListener('click', onCancel);
     if(inputs.saveBtn) inputs.saveBtn.addEventListener('click', onSaveClient);
 
-    // data panel handlers
+    // data handlers
     if(inputs.c_name) inputs.c_name.addEventListener('input', onClientInput);
     if(inputs.c_phone) inputs.c_phone.addEventListener('input', onClientInput);
     if(inputs.c_email) inputs.c_email.addEventListener('input', onClientInput);
     if(inputs.c_screens){
       inputs.c_screens.addEventListener('input', onClientInput);
-      // stepper buttons inside overlay
+      // steppers (delegation inside overlay)
       qa('.stepper-incr', inputs.overlay).forEach(b => b.addEventListener('click', ()=> changeScreens(1)));
       qa('.stepper-decr', inputs.overlay).forEach(b => b.addEventListener('click', ()=> changeScreens(-1)));
     }
+
     if(inputs.btnSelectPlan) inputs.btnSelectPlan.addEventListener('click', onSelectPlanPrompt);
     if(inputs.btnSelectServer1) inputs.btnSelectServer1.addEventListener('click', onSelectServer1Prompt);
     if(inputs.btnSelectServer2) inputs.btnSelectServer2.addEventListener('click', onSelectServer2Prompt);
 
-    // panel expansion toggles
+    // panel toggles
     if(inputs.panelDataHeader) inputs.panelDataHeader.addEventListener('click', ()=> togglePanel('panel-data'));
     if(inputs.panelPointsHeader) inputs.panelPointsHeader.addEventListener('click', ()=> togglePanel('panel-points'));
-    // keyboard accessibility
     if(inputs.panelDataHeader) inputs.panelDataHeader.addEventListener('keydown', (e)=> { if(e.key==='Enter' || e.key===' ') togglePanel('panel-data'); });
     if(inputs.panelPointsHeader) inputs.panelPointsHeader.addEventListener('keydown', (e)=> { if(e.key==='Enter' || e.key===' ') togglePanel('panel-points'); });
 
@@ -134,11 +149,11 @@ const ClientsView = (function(){
 
   function onClientInput(){
     state.client.name = inputs.c_name ? inputs.c_name.value : '';
-    if(inputs.c_phone) state.client.phone = V.normalizePhone(inputs.c_phone.value);
+    state.client.phone = inputs.c_phone ? V.normalizePhone(inputs.c_phone.value) : '';
     state.client.email = inputs.c_email ? inputs.c_email.value : '';
     state.client.screensPerServer = inputs.c_screens ? Number(inputs.c_screens.value) || 1 : 1;
     if(inputs.c_dueDate) state.client.dueDate = inputs.c_dueDate.value;
-    // live summary
+
     renderSummaries();
     validateStep1();
     updateSaveState();
@@ -156,6 +171,7 @@ const ClientsView = (function(){
     const planLabel = state.plansMeta.find(p=>p.id===state.client.planId)?.name || '—';
     inputs.summaryPlan && (inputs.summaryPlan.textContent = planLabel);
     inputs.summaryScreens && (inputs.summaryScreens.textContent = `Telas: ${state.client.screensPerServer || 1}`);
+
     // points badges
     if(state.client.points && state.client.points.length){
       inputs.pointsBadges.innerHTML = '';
@@ -169,6 +185,7 @@ const ClientsView = (function(){
     } else {
       inputs.pointsBadges.textContent = 'Nenhum ponto';
     }
+
     updateQuotasView();
   }
 
@@ -187,8 +204,7 @@ const ClientsView = (function(){
     q('#err_plan', inputs.overlay) && (q('#err_plan', inputs.overlay).textContent = state.client.planId ? '' : 'Plano obrigatório');
     q('#err_server1', inputs.overlay) && (q('#err_server1', inputs.overlay).textContent = state.client.server1Id ? '' : 'Servidor1 obrigatório');
 
-    // show header hint for data panel
-    if(inputs.statusData) {
+    if(inputs.statusData){
       const ok = nameV.ok && phoneV.ok && emailV.ok && screensV.ok && dueV.ok && !!state.client.planId && !!state.client.server1Id;
       inputs.statusData.textContent = ok ? '' : 'Preencha os campos obrigatórios';
     }
@@ -201,9 +217,8 @@ const ClientsView = (function(){
     const screens = state.client.screensPerServer || 1;
     if(inputs.quotaServer1) inputs.quotaServer1.textContent = s1id ? `${sums[s1id] || 0} / ${screens}` : '-';
     if(inputs.quotaServer2) inputs.quotaServer2.textContent = s2id ? `${sums[s2id] || 0} / ${screens}` : '-';
-    // header hint for points
+
     if(inputs.statusPoints){
-      // if any server sums exceed screens show warning
       let warn = '';
       if(s1id && (sums[s1id]||0) > screens) warn = 'Quota excedida Servidor1';
       if(s2id && (sums[s2id]||0) > screens) warn = (warn ? warn + '; ' : '') + 'Quota excedida Servidor2';
@@ -211,23 +226,25 @@ const ClientsView = (function(){
     }
   }
 
-  // panel expand/collapse helpers
+  // panel helpers
   function setPanelExpanded(panelId, expanded){
-    const header = q(`#${panelId}-header`);
-    const body = q(`#${panelId}-body`);
+    const header = q(`#${panelId}-header`, inputs.overlay);
+    const body = q(`#${panelId}-body`, inputs.overlay);
     if(!header || !body) return;
     header.setAttribute('aria-expanded', expanded ? 'true' : 'false');
     if(expanded){ body.classList.remove('hidden'); header.focus(); } else { body.classList.add('hidden'); }
   }
   function togglePanel(panelId){
-    const header = q(`#${panelId}-header`);
-    const expanded = header && header.getAttribute('aria-expanded') === 'true';
+    const header = q(`#${panelId}-header`, inputs.overlay);
+    if(!header) return;
+    const expanded = header.getAttribute('aria-expanded') === 'true';
     setPanelExpanded(panelId, !expanded);
-    // scroll into view on expand for mobile
-    if(!expanded) { q(`#${panelId}-header`).scrollIntoView({behavior:'smooth', block:'center'}); }
+    if(!expanded){
+      header.scrollIntoView({ behavior:'smooth', block:'center' });
+    }
   }
 
-  // selection prompts (for prototype) - same UX as before but allow replacement with modals
+  // selection prompts (prototipo)
   async function onSelectPlanPrompt(){
     const options = state.plansMeta.map(p=>`${p.id}: ${p.name} (${p.months}m)`).join('\n');
     const pick = prompt(`Escolha plano:\n${options}`);
@@ -237,13 +254,10 @@ const ClientsView = (function(){
     if(plan){
       state.client.planId = plan.id;
       if(inputs.chipPlan){ inputs.chipPlan.textContent = `${plan.name} • ${plan.months}m`; inputs.chipPlan.setAttribute('aria-hidden','false'); }
-      // auto suggest due date
       const due = new Date(); due.setMonth(due.getMonth() + (plan.months || 0));
       inputs.c_dueDate && (inputs.c_dueDate.value = due.toISOString().slice(0,10));
-      state.client.dueDate = inputs.c_dueDate.value;
-      renderSummaries();
-      validateStep1();
-      updateSaveState();
+      state.client.dueDate = inputs.c_dueDate ? inputs.c_dueDate.value : null;
+      renderSummaries(); validateStep1(); updateSaveState();
     }
   }
 
@@ -272,7 +286,7 @@ const ClientsView = (function(){
     if(server){ state.client.server2Id = server.id; if(inputs.chipServer2){ inputs.chipServer2.textContent = server.name; inputs.chipServer2.setAttribute('aria-hidden','false'); } renderSummaries(); validateStep1(); updateSaveState(); }
   }
 
-  // Points CRUD with select for app and server
+  // Points CRUD
   function openPointForm(editPoint=null){
     const clone = pointTemplate.content.cloneNode(true);
     const formEl = clone.querySelector('.point-form');
@@ -293,7 +307,7 @@ const ClientsView = (function(){
       selApp.appendChild(opt);
     });
 
-    // prefill when editing
+    // prefill
     if(editPoint){
       state.editingPointId = editPoint.id;
       selServer.value = editPoint.serverId;
@@ -308,11 +322,9 @@ const ClientsView = (function(){
       if(pre) selServer.value = pre.id;
       formEl.querySelector('#pointFormTitle').textContent = 'Novo Ponto';
       formEl.querySelector('#p_conns').value = 1;
-      formEl.querySelector('#p_user').value = '';
-      formEl.querySelector('#p_pass').value = '';
     }
 
-    // apply app rules on change
+    // app rules on change
     const inputConns = formEl.querySelector('#p_conns');
     selApp.addEventListener('change', ()=>{
       const meta = state.appsMeta.find(a => a.id === selApp.value);
@@ -373,14 +385,19 @@ const ClientsView = (function(){
       renderSummaries();
     });
 
-    // show point form
     inputs.pointFormRoot.innerHTML = '';
     inputs.pointFormRoot.appendChild(clone);
     inputs.pointFormRoot.classList.remove('hidden');
     inputs.pointFormRoot.setAttribute('aria-hidden','false');
 
-    // trigger change to apply app rule initial state
+    // trigger change to apply rules
     selApp.dispatchEvent(new Event('change'));
+    // ensure point form is visible on mobile
+    setTimeout(()=> {
+      if(inputs.pointFormRoot && window.innerWidth <= 820){
+        inputs.pointFormRoot.scrollIntoView({behavior:'smooth', block:'center'});
+      }
+    }, 120);
   }
 
   function prepareServerOptionsForPoint(){
@@ -405,7 +422,7 @@ const ClientsView = (function(){
 
   function renderPointsList(){
     inputs.pointsList.innerHTML = '';
-    if(state.client.points.length === 0){
+    if(!state.client.points || state.client.points.length === 0){
       const empty = document.createElement('div'); empty.className = 'card'; empty.textContent = 'Nenhum ponto adicionado'; inputs.pointsList.appendChild(empty); return;
     }
 
@@ -417,7 +434,6 @@ const ClientsView = (function(){
       item.querySelector('.point-app').textContent = state.appsMeta.find(a=>a.id===p.appId)?.name || p.appId;
       item.querySelector('.point-conns').textContent = `Conexões: ${p.conns}`;
       item.querySelector('.point-user').textContent = `Usuário: ${p.user}`;
-      // senha exibida em texto claro conforme solicitado
       item.querySelector('.point-pass').textContent = `Senha: ${p.pass || ''}`;
 
       item.querySelector('.edit-point').addEventListener('click', ()=> openPointForm(p));
@@ -456,9 +472,8 @@ const ClientsView = (function(){
     const enable = nameV.ok && phoneV.ok && screensV.ok && dueV.ok && planSelected && server1Selected && quotaExact && localUnique.ok;
     if(inputs.saveBtn) inputs.saveBtn.disabled = !enable;
 
-    // feedback for user
     if(!localUnique.ok && inputs.globalFeedback) inputs.globalFeedback.textContent = localUnique.msg;
-    else inputs.globalFeedback.textContent = '';
+    else if(inputs.globalFeedback) inputs.globalFeedback.textContent = '';
   }
 
   async function onSaveClient(){
@@ -481,7 +496,6 @@ const ClientsView = (function(){
       if(res && res.success){
         alert('Cliente salvo com sucesso');
         closeOverlay();
-        // ideally refresh list outside (UI integration)
       } else {
         throw new Error('Falha ao salvar');
       }
@@ -497,10 +511,28 @@ const ClientsView = (function(){
   }
 
   function closeOverlay(){
+    // desbloquear scroll do body
+    document.documentElement.style.overflow = '';
+    document.body.style.overflow = '';
+
+    // remover overlay
     const overlay = document.querySelector('.overlay-modal');
     if(overlay) overlay.remove();
+
     // reset state
     state = { client: createEmptyClient(), editingPointId: null, appsMeta: state.appsMeta, serversMeta: state.serversMeta, plansMeta: state.plansMeta };
+  }
+
+  // scroll inputs into view on mobile when focused
+  function onFocusInHandler(e){
+    if(window.innerWidth <= 820){
+      const el = e.target;
+      setTimeout(()=> {
+        if(el && typeof el.scrollIntoView === 'function'){
+          el.scrollIntoView({behavior:'smooth', block:'center'});
+        }
+      }, 200);
+    }
   }
 
   return { init };
