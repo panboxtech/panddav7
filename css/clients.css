@@ -1,61 +1,51 @@
-/* css/clients.css - ampliado para wizard e ponto de acesso */
+/* Overlay modal */
+.overlay-modal{ position:fixed; inset:0; display:flex; align-items:flex-end; justify-content:center; z-index:120; }
+.overlay-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,0.5); }
+.overlay-content{ position:relative; width:100%; max-width:920px; max-height:96vh; overflow:auto; border-radius:12px; margin:1rem; background:var(--card); box-shadow:0 18px 50px rgba(0,0,0,0.6); padding:0.6rem; z-index:121; }
 
-.client-modal{ max-width:900px; width:100%; background:var(--card); padding:1rem; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.6) }
-.client-header{ display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:.6rem }
-.client-header h3{ margin:0; font-size:1.1rem }
+/* panels (accordion-like) */
+.panels{ display:flex; flex-direction:column; gap:0.6rem; }
+.panel{ border-radius:10px; overflow:hidden; border:1px solid rgba(255,255,255,0.03); background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent) }
+.panel-header{ display:flex; align-items:center; justify-content:space-between; padding:.6rem .8rem; cursor:pointer; gap:.6rem }
+.panel-summary{ display:flex; gap:.5rem; align-items:center; color:var(--text); font-weight:600; overflow:hidden; white-space:nowrap; text-overflow:ellipsis }
+.panel-summary .summary-name{ max-width:40%; overflow:hidden; text-overflow:ellipsis }
+.panel-body{ padding:.6rem .8rem; background:transparent }
+.panel-body.hidden{ display:none }
+.panel-controls{ display:flex; align-items:center; gap:.5rem }
 
-.client-progress{ display:flex; gap:.5rem; margin-bottom:.8rem }
-.step{ padding:.45rem .75rem; border-radius:999px; background:transparent; border:1px solid rgba(255,255,255,0.03); color:var(--muted); cursor:pointer }
-.step.active{ background:var(--accent); color:#012; border-color:transparent }
+/* feedback and status in header */
+.panel-status{ font-size:.85rem; color:var(--muted); padding:.15rem .4rem; border-radius:8px }
 
-.client-wizard{ display:block }
-.step-panel{ padding:0.6rem 0 }
-.step-panel.hidden{ display:none }
+/* chevron transform depending expanded state */
+.panel-header[aria-expanded="true"] .chevron{ transform:rotate(180deg) }
 
-.form-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:.6rem }
-.form-grid label{ display:flex; flex-direction:column; gap:.35rem }
-.form-grid input, .form-grid select, .btn-select{ padding:.5rem; border-radius:8px; border:1px solid rgba(255,255,255,0.04); background:transparent; color:var(--text) }
-.field-msg{ font-size:.85rem; color:var(--muted); min-height:1.1em }
+/* points badges summary */
+.points-badges{ display:flex; gap:.35rem; align-items:center; flex-wrap:wrap }
+.points-badges .badge{ background:rgba(255,255,255,0.03); padding:.25rem .5rem; border-radius:999px; font-size:.9rem }
 
-.chip{ margin-top:.35rem; padding:.35rem .6rem; background:rgba(255,255,255,0.02); border-radius:999px; display:inline-block; color:var(--text) }
+/* global footer */
+.modal-footer{ display:flex; justify-content:space-between; gap:.6rem; padding:.6rem; border-top:1px solid rgba(255,255,255,0.03); position:sticky; bottom:0; background:linear-gradient(180deg, rgba(0,0,0,0.02), transparent) }
+.footer-right{ display:flex; gap:.6rem; align-items:center }
 
-/* steppers */
-.number-stepper{ display:inline-flex; align-items:center; gap:.4rem; background:transparent; border-radius:8px }
-.number-stepper input{ width:72px; text-align:center; padding:.45rem; border-radius:8px; border:1px solid rgba(255,255,255,0.04) }
-.number-stepper .stepper-incr, .number-stepper .stepper-decr{ background:transparent; border:1px solid rgba(255,255,255,0.04); padding:.35rem .6rem; border-radius:8px; cursor:pointer }
+/* responsiveness */
+@media(max-width:820px){
+  .overlay-content{ width:100%; height:100vh; margin:0; border-radius:0; display:flex; flex-direction:column; }
+  .panel-body{ padding:0.6rem }
+  .panel-header{ padding:.8rem }
+  .modal-footer{ position:fixed; bottom:0; left:0; right:0; padding:.8rem; }
+}
 
-/* points list */
-.points-header{ display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:.6rem }
-.points-info{ display:flex; gap:1rem; color:var(--muted) }
-.points-list{ display:flex; flex-direction:column; gap:.5rem; margin-bottom:.8rem }
+/* feedback messages */
+.field-msg{ color:var(--muted); min-height:1.1em }
 
-/* point form and items */
-.point-form{ padding:.8rem; border-radius:10px; background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent) }
-.point-actions{ display:flex; justify-content:space-between; gap:.5rem; margin-top:.6rem }
+/* points list & item */
+.points-list{ display:flex; flex-direction:column; gap:.5rem; margin-bottom:.6rem }
 .point-item{ padding:.6rem; display:flex; flex-direction:column; gap:.4rem }
 .point-top{ display:flex; align-items:center; justify-content:space-between }
-.point-meta{ display:flex; gap:.6rem; align-items:center }
+.point-meta{ display:flex; gap:.6rem; align-items:center; }
 .point-server, .point-app{ font-weight:600 }
 .point-actions-inline{ display:flex; gap:.4rem; align-items:center }
 .point-bottom{ display:flex; gap:.8rem; color:var(--muted) }
-.masked{ filter:blur(1px) }
 
-.wizard-actions{ display:flex; justify-content:space-between; margin-top:.8rem; gap:.6rem }
-.right-actions{ display:flex; gap:.5rem }
-.left-actions{ display:flex; gap:.5rem }
-
-/* responsive adjustments */
-@media(max-width:820px){
-  .form-grid{ grid-template-columns:1fr; }
-  .client-modal{ padding:0.8rem; border-radius:0; height:100vh; overflow:auto }
-  .client-header{ padding:.6rem 0; }
-  .wizard-actions{ position:sticky; bottom:0; background:linear-gradient(180deg, rgba(0,0,0,0.08), transparent); padding:.6rem 0; margin-top:.6rem }
-  .number-stepper input{ width:100%; }
-}
-
-/* disabled states */
-button[disabled], .btn-primary[disabled]{ opacity:.55; cursor:default; pointer-events:none }
-
-/* small helpers */
-.card{ padding:.6rem; border-radius:8px; background:var(--card) }
-.btn-select{ display:inline-flex; align-items:center; gap:.5rem; cursor:pointer }
+/* button states */
+button[disabled], .btn-primary[disabled]{ opacity:.55; pointer-events:none }
