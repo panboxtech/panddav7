@@ -1,19 +1,182 @@
-<!-- Template isolado para evitar injeção -->
+<!-- views/client-form.html -->
+<!-- Template do modal / wizard de cliente com duas seções e templates internos -->
 <template id="clientFormTemplate">
-  <div class="client-form">
-    <h3 id="formTitle">Novo Cliente</h3>
-    <div class="form-row">
-      <input id="fieldName" placeholder="Nome" autocomplete="name" />
-      <input id="fieldPhone" placeholder="Telefone" autocomplete="tel" />
+  <div class="client-modal">
+    <div class="client-header">
+      <h3 id="clientModalTitle">Novo Cliente</h3>
+      <button id="closeClientModal" class="icon-btn" type="button" aria-label="Fechar">✕</button>
     </div>
-    <div class="form-row">
-      <input id="fieldUser" placeholder="Usuário" autocomplete="username" />
-      <input id="fieldPass" placeholder="Senha" type="password" autocomplete="new-password" />
+
+    <!-- progresso simples -->
+    <div class="client-progress" role="tablist" aria-label="Etapas">
+      <button class="step active" data-step="1" type="button" aria-selected="true">1 Dados</button>
+      <button class="step" data-step="2" type="button" aria-selected="false">2 Pontos</button>
     </div>
-    <div class="form-row actions">
-      <button id="saveClientBtn" class="btn-primary" type="button">Salvar</button>
-      <button id="cancelClientBtn" class="btn-ghost" type="button">Cancelar</button>
+
+    <form id="clientWizard" class="client-wizard" novalidate>
+      <!-- Step 1: Dados do Cliente -->
+      <section class="step-panel" data-step="1" aria-hidden="false">
+        <div class="form-grid">
+          <label>
+            <span>Nome *</span>
+            <input id="c_name" type="text" autocomplete="name" inputmode="text" />
+            <div class="field-msg" id="err_name" aria-live="polite"></div>
+          </label>
+
+          <label>
+            <span>Telefone *</span>
+            <input id="c_phone" type="tel" inputmode="tel" pattern="[0-9\s()+-]*" />
+            <div class="field-msg" id="err_phone" aria-live="polite"></div>
+          </label>
+
+          <label>
+            <span>Email</span>
+            <input id="c_email" type="email" autocomplete="email" />
+            <div class="field-msg" id="err_email" aria-live="polite"></div>
+          </label>
+
+          <label>
+            <span>Plano *</span>
+            <button id="btnSelectPlan" class="btn-select" type="button">Selecionar plano</button>
+            <div class="chip" id="chipPlan" aria-hidden="true"></div>
+            <div class="field-msg" id="err_plan" aria-live="polite"></div>
+          </label>
+
+          <label>
+            <span>Data de Vencimento *</span>
+            <input id="c_dueDate" type="date" />
+            <div class="field-msg" id="err_dueDate" aria-live="polite"></div>
+          </label>
+
+          <label>
+            <span>Telas por servidor *</span>
+            <div class="number-stepper">
+              <button type="button" class="stepper-decr" aria-label="Diminuir">−</button>
+              <input id="c_screens" type="number" min="1" value="1" />
+              <button type="button" class="stepper-incr" aria-label="Aumentar">+</button>
+            </div>
+            <div class="field-msg" id="err_screens" aria-live="polite"></div>
+          </label>
+
+          <label>
+            <span>Servidor 1 *</span>
+            <button id="btnSelectServer1" class="btn-select" type="button">Selecionar servidor 1</button>
+            <div class="chip" id="chipServer1" aria-hidden="true"></div>
+            <div class="field-msg" id="err_server1" aria-live="polite"></div>
+          </label>
+
+          <label>
+            <span>Servidor 2</span>
+            <button id="btnSelectServer2" class="btn-select" type="button">Selecionar servidor 2</button>
+            <div class="chip" id="chipServer2" aria-hidden="true"></div>
+            <div class="field-msg" id="err_server2" aria-live="polite"></div>
+          </label>
+        </div>
+
+        <div class="wizard-actions">
+          <div class="left-actions"></div>
+          <div class="right-actions">
+            <button id="toStep2" class="btn-primary" type="button" disabled>Próximo</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step 2: Gerenciar Pontos de Acesso -->
+      <section class="step-panel hidden" data-step="2" aria-hidden="true">
+        <div class="points-header">
+          <div class="points-info">
+            <div><strong>Quota Servidor1:</strong> <span id="quotaServer1">0</span></div>
+            <div><strong>Quota Servidor2:</strong> <span id="quotaServer2">0</span></div>
+          </div>
+          <div>
+            <button id="btnAddPoint" class="btn-primary" type="button">Adicionar ponto</button>
+          </div>
+        </div>
+
+        <div id="pointsList" class="points-list" aria-live="polite"></div>
+
+        <!-- formulário de ponto (clonado do template interno) -->
+        <div id="pointFormRoot" class="card hidden" aria-hidden="true"></div>
+
+        <div class="wizard-actions">
+          <div class="left-actions">
+            <button id="backToStep1" class="btn-ghost" type="button">Anterior</button>
+          </div>
+          <div class="right-actions">
+            <button id="saveClientBtn" class="btn-primary" type="button" disabled>Salvar Cliente</button>
+          </div>
+        </div>
+      </section>
+    </form>
+  </div>
+</template>
+
+<!-- template do formulário de ponto -->
+<template id="pointFormTemplate">
+  <div class="point-form">
+    <h4 id="pointFormTitle">Novo Ponto</h4>
+
+    <div class="form-grid">
+      <label>
+        <span>Servidor *</span>
+        <select id="p_server" ></select>
+        <div class="field-msg" id="err_p_server"></div>
+      </label>
+
+      <label>
+        <span>App *</span>
+        <button id="btnSelectApp" class="btn-select" type="button">Selecionar App</button>
+        <div class="chip" id="chipApp" aria-hidden="true"></div>
+        <div class="field-msg" id="err_p_app"></div>
+      </label>
+
+      <label>
+        <span>Pontos simultâneos *</span>
+        <div class="number-stepper">
+          <button type="button" class="stepper-decr" aria-label="Diminuir">−</button>
+          <input id="p_conns" type="number" min="1" value="1" />
+          <button type="button" class="stepper-incr" aria-label="Aumentar">+</button>
+        </div>
+        <div class="field-msg" id="err_p_conns"></div>
+      </label>
+
+      <label>
+        <span>Usuário *</span>
+        <input id="p_user" type="text" />
+        <div class="field-msg" id="err_p_user"></div>
+      </label>
+
+      <label>
+        <span>Senha *</span>
+        <input id="p_pass" type="password" />
+        <div class="field-msg" id="err_p_pass"></div>
+      </label>
     </div>
-    <div id="formMsg" class="msg" aria-live="polite"></div>
+
+    <div class="point-actions">
+      <button id="cancelPointBtn" class="btn-ghost" type="button">Cancelar</button>
+      <button id="addPointBtn" class="btn-primary" type="button">Adicionar</button>
+    </div>
+  </div>
+</template>
+
+<!-- template do item resumido na lista de pontos -->
+<template id="pointItemTemplate">
+  <div class="point-item card">
+    <div class="point-top">
+      <div class="point-meta">
+        <div class="point-server"></div>
+        <div class="point-app"></div>
+      </div>
+      <div class="point-actions-inline">
+        <div class="point-conns"></div>
+        <button class="icon-btn edit-point" aria-label="Editar">✎</button>
+        <button class="icon-btn remove-point" aria-label="Remover">🗑</button>
+      </div>
+    </div>
+    <div class="point-bottom">
+      <div class="point-user"></div>
+      <div class="point-pass masked"></div>
+    </div>
   </div>
 </template>
