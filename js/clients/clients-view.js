@@ -20,36 +20,65 @@ const ClientsView = (function(){
   let inputs = {};
 
   // helpers
-  function q(sel, ctx=root){ return ctx.querySelector(sel); }
-  function qa(sel, ctx=root){ return Array.from(ctx.querySelectorAll(sel)); }
+  function q(sel, ctx=root){ return ctx ? ctx.querySelector(sel) : document.querySelector(sel); }
+  function qa(sel, ctx=root){ return Array.from((ctx||document).querySelectorAll(sel)); }
 
   async function init(){
-    // carregar metadados
-    clientsService.seedMocksIfEmpty();
-    state.appsMeta = await clientsService.listApps();
-    state.serversMeta = await clientsService.listServers();
-    state.plansMeta = await clientsService.listPlans();
+    try{
+      // carregar metadados
+      clientsService.seedMocksIfEmpty();
+      state.appsMeta = await clientsService.listApps();
+      state.serversMeta = await clientsService.listServers();
+      state.plansMeta = await clientsService.listPlans();
 
-    // localizar template no DOM carregado pela ui.js
-    formTemplate = document.getElementById('clientFormTemplate');
-    pointTemplate = document.getElementById('pointFormTemplate');
-    pointItemTemplate = document.getElementById('pointItemTemplate');
+      // Certificar que templates do formulário estão no DOM.
+      // Se não estiverem, carregar views/client-form.html e injetar seus templates no document.
+      if(!document.getElementById('clientFormTemplate') || !document.getElementById('pointFormTemplate')){
+        const res = await fetch('./views/client-form.html', { cache: 'no-store' });
+        if(!res.ok) throw new Error(`Falha ao carregar templates: ${res.status}`);
+        const text = await res.text();
+        const tmp = document.createElement('div');
+        tmp.innerHTML = text;
+        // mover templates para o body (document) para que possam ser acessados por id
+        const templates = tmp.querySelectorAll('template');
+        templates.forEach(t => document.body.appendChild(t));
+      }
 
-    // clonar o template principal dentro do point where viewRoot is
-    const tpl = formTemplate.content.cloneNode(true);
-    root = document.createElement('div');
-    root.appendChild(tpl);
-    // anexar ao DOM: o ui.js já carregou a estrutura de views, então inserimos o modal content into #clientFormRoot
-    const clientFormRoot = document.getElementById('clientFormRoot');
-    clientFormRoot.innerHTML = '';
-    clientFormRoot.appendChild(root);
-    clientFormRoot.classList.remove('hidden');
-    clientFormRoot.setAttribute('aria-hidden','false');
+      // localizar templates agora presentes no DOM
+      formTemplate = document.getElementById('clientFormTemplate');
+      pointTemplate = document.getElementById('pointFormTemplate');
+      pointItemTemplate = document.getElementById('pointItemTemplate');
 
-    bindElements();
-    attachHandlers();
-    renderInitial();
-    updateSaveState();
+      if(!formTemplate || !pointTemplate || !pointItemTemplate){
+        throw new Error('Templates do formulário não encontrados após carregamento');
+      }
+
+      // clonar o template principal e anexar ao clientFormRoot existente na view
+      const tpl = formTemplate.content.cloneNode(true);
+      root = document.createElement('div');
+      root.appendChild(tpl);
+
+      const clientFormRoot = document.getElementById('clientFormRoot');
+      if(!clientFormRoot) throw new Error('#clientFormRoot não encontrado na view');
+      clientFormRoot.innerHTML = '';
+      clientFormRoot.appendChild(root);
+      clientFormRoot.classList.remove('hidden');
+      clientFormRoot.setAttribute('aria-hidden','false');
+
+      bindElements();
+      attachHandlers();
+      renderInitial();
+      updateSaveState();
+    }catch(err){
+      console.error('Erro inicializando clientsView:', err);
+      // exibir erro simples no lugar do formulário, sem quebrar o restante da app
+      const clientFormRoot = document.getElementById('clientFormRoot');
+      if(clientFormRoot){
+        clientFormRoot.classList.remove('hidden');
+        clientFormRoot.innerHTML = `<div class="card"><strong>Erro ao carregar formulário</strong><div style="margin-top:.5rem;color:var(--muted)">${String(err)}</div></div>`;
+      }
+      throw err;
+    }
   }
 
   function bindElements(){
@@ -76,41 +105,43 @@ const ClientsView = (function(){
     inputs.pointFormRoot = q('#pointFormRoot');
     inputs.saveBtn = q('#saveClientBtn');
     // modal controls
-    q('#closeClientModal')?.addEventListener('click', closeModal);
+    const closeBtn = q('#closeClientModal');
+    if(closeBtn) closeBtn.addEventListener('click', closeModal);
     qa('.step').forEach(btn => btn.addEventListener('click', onStepClick));
-    // steppers
-    q('.stepper-incr')?.addEventListener('click', () => changeScreens(1));
-    q('.stepper-decr')?.addEventListener('click', () => changeScreens(-1));
+    // steppers: local delegation (may be multiple steppers, so selecting by class inside document)
+    qa('.stepper-incr').forEach(b => b.addEventListener('click', () => changeScreens(1)));
+    qa('.stepper-decr').forEach(b => b.addEventListener('click', () => changeScreens(-1)));
   }
 
   function attachHandlers(){
-    inputs.name.addEventListener('input', onClientInput);
-    inputs.phone.addEventListener('input', onClientInput);
-    inputs.email.addEventListener('input', onClientInput);
-    inputs.screens.addEventListener('input', onClientInput);
-    inputs.planBtn.addEventListener('click', onSelectPlan);
-    inputs.server1Btn.addEventListener('click', onSelectServer1);
-    inputs.server2Btn.addEventListener('click', onSelectServer2);
-    inputs.toStep2.addEventListener('click', gotoStep2);
-    inputs.backToStep1.addEventListener('click', gotoStep1);
-    btnAddPoint.addEventListener('click', openPointForm);
-    inputs.saveBtn.addEventListener('click', onSaveClient);
+    if(inputs.name) inputs.name.addEventListener('input', onClientInput);
+    if(inputs.phone) inputs.phone.addEventListener('input', onClientInput);
+    if(inputs.email) inputs.email.addEventListener('input', onClientInput);
+    if(inputs.screens) inputs.screens.addEventListener('input', onClientInput);
+    if(inputs.planBtn) inputs.planBtn.addEventListener('click', onSelectPlan);
+    if(inputs.server1Btn) inputs.server1Btn.addEventListener('click', onSelectServer1);
+    if(inputs.server2Btn) inputs.server2Btn.addEventListener('click', onSelectServer2);
+    if(inputs.toStep2) inputs.toStep2.addEventListener('click', gotoStep2);
+    if(inputs.backToStep1) inputs.backToStep1.addEventListener('click', gotoStep1);
+    if(btnAddPoint) btnAddPoint.addEventListener('click', openPointForm);
+    if(inputs.saveBtn) inputs.saveBtn.addEventListener('click', onSaveClient);
   }
 
   function renderInitial(){
     // preencher valores iniciais
-    inputs.screens.value = state.client.screensPerServer || 1;
-    inputs.quotaServer1.textContent = '0';
-    inputs.quotaServer2.textContent = '0';
+    if(inputs.screens) inputs.screens.value = state.client.screensPerServer || 1;
+    if(inputs.quotaServer1) inputs.quotaServer1.textContent = '0';
+    if(inputs.quotaServer2) inputs.quotaServer2.textContent = '0';
     renderPointsList();
   }
 
   function onClientInput(){
-    state.client.name = inputs.name.value;
-    state.client.phone = V.normalizePhone(inputs.phone.value);
-    inputs.phone.value = inputs.clientPhoneMask ? inputs.clientPhoneMask : inputs.phone.value;
-    state.client.email = inputs.email.value;
-    state.client.screensPerServer = Number(inputs.screens.value) || 1;
+    state.client.name = inputs.name ? inputs.name.value : '';
+    // keep raw phone in input but normalize for storage
+    const rawPhone = inputs.phone ? inputs.phone.value : '';
+    state.client.phone = V.normalizePhone(rawPhone);
+    state.client.email = inputs.email ? inputs.email.value : '';
+    state.client.screensPerServer = inputs.screens ? Number(inputs.screens.value) || 1 : 1;
     updateDerivedFromPlan();
     updateQuotasView();
     validateStep1();
@@ -118,11 +149,9 @@ const ClientsView = (function(){
   }
 
   function updateDerivedFromPlan(){
-    // se plan selecionado, sugere dueDate automaticamente
     if(state.client.planId){
       const plan = state.plansMeta.find(p=>p.id === state.client.planId);
-      if(plan && plan.months){
-        const today = new Date();
+      if(plan && plan.months && inputs.dueDate){
         const due = new Date();
         due.setMonth(due.getMonth() + plan.months);
         const iso = due.toISOString().slice(0,10);
@@ -133,6 +162,7 @@ const ClientsView = (function(){
   }
 
   function changeScreens(delta){
+    if(!inputs.screens) return;
     const cur = Number(inputs.screens.value) || 1;
     const next = Math.max(1, cur + delta);
     inputs.screens.value = next;
@@ -140,7 +170,6 @@ const ClientsView = (function(){
   }
 
   async function onSelectPlan(){
-    // simples modal de seleção via prompt para protótipo (substituir por modal real)
     const options = state.plansMeta.map(p=>`${p.id}: ${p.name} (${p.months}m)`).join('\n');
     const pick = prompt(`Escolha plano:\n${options}`);
     if(!pick) return;
@@ -148,8 +177,7 @@ const ClientsView = (function(){
     const plan = state.plansMeta.find(p=>p.id===id);
     if(plan){
       state.client.planId = plan.id;
-      inputs.planChip.textContent = `${plan.name} • ${plan.months}m`;
-      inputs.planChip.setAttribute('aria-hidden','false');
+      if(inputs.planChip) { inputs.planChip.textContent = `${plan.name} • ${plan.months}m`; inputs.planChip.setAttribute('aria-hidden','false'); }
       updateDerivedFromPlan();
       validateStep1();
       updateSaveState();
@@ -166,10 +194,11 @@ const ClientsView = (function(){
     const server = state.serversMeta.find(s=>s.id===id);
     if(server){
       state.client.server1Id = server.id;
-      inputs.server1Chip.textContent = server.name;
-      inputs.server1Chip.setAttribute('aria-hidden','false');
-      // if server2 equals server1 reset server2
-      if(state.client.server2Id === server.id) { state.client.server2Id = null; inputs.server2Chip.textContent=''; inputs.server2Chip.setAttribute('aria-hidden','true'); }
+      if(inputs.server1Chip){ inputs.server1Chip.textContent = server.name; inputs.server1Chip.setAttribute('aria-hidden','false'); }
+      if(state.client.server2Id === server.id){
+        state.client.server2Id = null;
+        if(inputs.server2Chip){ inputs.server2Chip.textContent=''; inputs.server2Chip.setAttribute('aria-hidden','true'); }
+      }
       validateStep1();
       updateQuotasView();
       updateSaveState();
@@ -178,10 +207,7 @@ const ClientsView = (function(){
 
   async function onSelectServer2(){
     const available = state.serversMeta.filter(s => s.id !== state.client.server1Id);
-    if(available.length === 0){
-      alert('Nenhum servidor adicional disponível');
-      return;
-    }
+    if(available.length === 0){ alert('Nenhum servidor adicional disponível'); return; }
     const options = available.map(s=>`${s.id}: ${s.name}`).join('\n');
     const pick = prompt(`Escolha Servidor2:\n${options}`);
     if(!pick) return;
@@ -189,8 +215,7 @@ const ClientsView = (function(){
     const server = available.find(s=>s.id===id);
     if(server){
       state.client.server2Id = server.id;
-      inputs.server2Chip.textContent = server.name;
-      inputs.server2Chip.setAttribute('aria-hidden','false');
+      if(inputs.server2Chip){ inputs.server2Chip.textContent = server.name; inputs.server2Chip.setAttribute('aria-hidden','false'); }
       validateStep1();
       updateQuotasView();
       updateSaveState();
@@ -199,30 +224,30 @@ const ClientsView = (function(){
 
   function validateStep1(){
     const nameV = V.validateName(state.client.name);
-    const phoneV = V.validatePhoneRaw(inputs.phone.value);
+    const phoneV = V.validatePhoneRaw(inputs.phone ? inputs.phone.value : '');
     const emailV = V.validateEmail(state.client.email);
-    const screensV = V.validateScreens(inputs.screens.value);
-    const dueV = V.validateDueDate(inputs.dueDate.value);
+    const screensV = V.validateScreens(inputs.screens ? inputs.screens.value : 1);
+    const dueV = V.validateDueDate(inputs.dueDate ? inputs.dueDate.value : null);
 
-    q('#err_name').textContent = nameV.ok ? '' : nameV.msg;
-    q('#err_phone').textContent = phoneV.ok ? '' : phoneV.msg;
-    q('#err_email').textContent = emailV.ok ? '' : emailV.msg;
-    q('#err_screens').textContent = screensV.ok ? '' : screensV.msg;
-    q('#err_dueDate').textContent = dueV.ok ? '' : dueV.msg;
-    q('#err_plan').textContent = state.client.planId ? '' : 'Plano obrigatório';
-    q('#err_server1').textContent = state.client.server1Id ? '' : 'Servidor1 obrigatório';
+    if(document.getElementById('err_name')) document.getElementById('err_name').textContent = nameV.ok ? '' : nameV.msg;
+    if(document.getElementById('err_phone')) document.getElementById('err_phone').textContent = phoneV.ok ? '' : phoneV.msg;
+    if(document.getElementById('err_email')) document.getElementById('err_email').textContent = emailV.ok ? '' : emailV.msg;
+    if(document.getElementById('err_screens')) document.getElementById('err_screens').textContent = screensV.ok ? '' : screensV.msg;
+    if(document.getElementById('err_dueDate')) document.getElementById('err_dueDate').textContent = dueV.ok ? '' : dueV.msg;
+    if(document.getElementById('err_plan')) document.getElementById('err_plan').textContent = state.client.planId ? '' : 'Plano obrigatório';
+    if(document.getElementById('err_server1')) document.getElementById('err_server1').textContent = state.client.server1Id ? '' : 'Servidor1 obrigatório';
 
-    // enable next only if basics valid
     const ok = nameV.ok && phoneV.ok && emailV.ok && screensV.ok && dueV.ok && !!state.client.planId && !!state.client.server1Id;
-    inputs.toStep2.disabled = !ok;
+    if(inputs.toStep2) inputs.toStep2.disabled = !ok;
   }
 
   function gotoStep2(){
-    // switch panels
     qa('.step').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected','false'); });
-    const s2 = q('.step[data-step="2"]'); s2.classList.add('active'); s2.setAttribute('aria-selected','true');
-    q('.step-panel[data-step="1"]').classList.add('hidden'); q('.step-panel[data-step="1"]').setAttribute('aria-hidden','true');
-    q('.step-panel[data-step="2"]').classList.remove('hidden'); q('.step-panel[data-step="2"]').setAttribute('aria-hidden','false');
+    const s2 = document.querySelector('.step[data-step="2"]'); if(s2) { s2.classList.add('active'); s2.setAttribute('aria-selected','true'); }
+    const panel1 = document.querySelector('.step-panel[data-step="1"]');
+    const panel2 = document.querySelector('.step-panel[data-step="2"]');
+    if(panel1) { panel1.classList.add('hidden'); panel1.setAttribute('aria-hidden','true'); }
+    if(panel2) { panel2.classList.remove('hidden'); panel2.setAttribute('aria-hidden','false'); }
     updateQuotasView();
     renderPointsList();
     updateSaveState();
@@ -230,9 +255,11 @@ const ClientsView = (function(){
 
   function gotoStep1(){
     qa('.step').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected','false'); });
-    const s1 = q('.step[data-step="1"]'); s1.classList.add('active'); s1.setAttribute('aria-selected','true');
-    q('.step-panel[data-step="2"]').classList.add('hidden'); q('.step-panel[data-step="2"]').setAttribute('aria-hidden','true');
-    q('.step-panel[data-step="1"]').classList.remove('hidden'); q('.step-panel[data-step="1"]').setAttribute('aria-hidden','false');
+    const s1 = document.querySelector('.step[data-step="1"]'); if(s1) { s1.classList.add('active'); s1.setAttribute('aria-selected','true'); }
+    const panel1 = document.querySelector('.step-panel[data-step="1"]');
+    const panel2 = document.querySelector('.step-panel[data-step="2"]');
+    if(panel2) { panel2.classList.add('hidden'); panel2.setAttribute('aria-hidden','true'); }
+    if(panel1) { panel1.classList.remove('hidden'); panel1.setAttribute('aria-hidden','false'); }
     updateSaveState();
   }
 
@@ -241,17 +268,16 @@ const ClientsView = (function(){
     const s1id = state.client.server1Id;
     const s2id = state.client.server2Id;
     const screens = state.client.screensPerServer || 1;
-    inputs.quotaServer1.textContent = `${sums[s1id] || 0} / ${screens}`;
-    inputs.quotaServer2.textContent = s2id ? `${sums[s2id] || 0} / ${screens}` : '-';
+    if(inputs.quotaServer1) inputs.quotaServer1.textContent = `${sums[s1id] || 0} / ${screens}`;
+    if(inputs.quotaServer2) inputs.quotaServer2.textContent = s2id ? `${sums[s2id] || 0} / ${screens}` : '-';
   }
 
   // ponto CRUD
   function openPointForm(editPoint=null){
-    // clone template
     const clone = pointTemplate.content.cloneNode(true);
     const formEl = clone.querySelector('.point-form');
-    // mount server options depending on selection
     const sel = formEl.querySelector('#p_server');
+    // preencher opções de servidor
     sel.innerHTML = '';
     const servers = prepareServerOptionsForPoint();
     servers.forEach(s => {
@@ -259,26 +285,23 @@ const ClientsView = (function(){
       opt.value = s.id; opt.textContent = s.name; sel.appendChild(opt);
     });
 
-    // prefill if editing
     if(editPoint){
       state.editingPointId = editPoint.id;
       formEl.querySelector('#p_conns').value = editPoint.conns;
       formEl.querySelector('#p_user').value = editPoint.user;
       formEl.querySelector('#p_pass').value = editPoint.pass;
       sel.value = editPoint.serverId;
-      // preselect app representation
       const appMeta = state.appsMeta.find(a=>a.id===editPoint.appId);
       if(appMeta) formEl.querySelector('#chipApp').textContent = appMeta.name;
       formEl.querySelector('#pointFormTitle').textContent = 'Editar Ponto';
+      formEl.dataset.appid = editPoint.appId;
     } else {
       state.editingPointId = null;
-      // preselect server: server1 if available and has capacity else server2
       const pre = selectPreServerForNewPoint();
       if(pre) sel.value = pre.id;
       formEl.querySelector('#pointFormTitle').textContent = 'Novo Ponto';
     }
 
-    // handlers inside point form
     const btnSelectAppLocal = formEl.querySelector('#btnSelectApp');
     const chipApp = formEl.querySelector('#chipApp');
     const inputConns = formEl.querySelector('#p_conns');
@@ -297,7 +320,6 @@ const ClientsView = (function(){
         formEl.dataset.appid = meta.id;
         chipApp.textContent = meta.name;
         chipApp.setAttribute('aria-hidden','false');
-        // if app.exclusive, force conns=1 and disable editing
         if(meta.multiplosAcessos === false){
           inputConns.value = 1;
           inputConns.setAttribute('disabled','true');
@@ -325,7 +347,6 @@ const ClientsView = (function(){
     });
 
     btnAdd.addEventListener('click', async ()=>{
-      // collect point
       const point = {
         id: state.editingPointId || ('p_' + Date.now().toString(36)),
         serverId: sel.value,
@@ -335,9 +356,7 @@ const ClientsView = (function(){
         pass: formEl.querySelector('#p_pass').value
       };
 
-      // local appMeta
       const appMeta = state.appsMeta.find(a=>a.id === point.appId);
-      // existing points for that server (excluding current being edited)
       const existing = state.client.points.filter(p => p.serverId === point.serverId && p.id !== point.id);
 
       const valid = V.validatePointLocal(point, appMeta, state.client.screensPerServer, existing);
@@ -346,16 +365,11 @@ const ClientsView = (function(){
         return;
       }
 
-      // local uniqueness for exclusive apps: check in client.points
       if(appMeta && appMeta.multiplosAcessos === false){
         const dup = state.client.points.find(p => p.appId === point.appId && p.user === point.user && p.id !== point.id);
-        if(dup){
-          alert('Usuário duplicado para app exclusivo no cliente (corrija antes de adicionar).');
-          return;
-        }
+        if(dup){ alert('Usuário duplicado para app exclusivo no cliente (corrija antes de adicionar).'); return; }
       }
 
-      // if editing update else add
       if(state.editingPointId){
         const idx = state.client.points.findIndex(p => p.id === state.editingPointId);
         if(idx !== -1) state.client.points[idx] = point;
@@ -363,7 +377,6 @@ const ClientsView = (function(){
         state.client.points.push(point);
       }
 
-      // reset form
       state.editingPointId = null;
       inputs.pointFormRoot.classList.add('hidden');
       inputs.pointFormRoot.innerHTML = '';
@@ -372,7 +385,6 @@ const ClientsView = (function(){
       updateSaveState();
     });
 
-    // mount form
     inputs.pointFormRoot.innerHTML = '';
     inputs.pointFormRoot.appendChild(clone);
     inputs.pointFormRoot.classList.remove('hidden');
@@ -380,16 +392,11 @@ const ClientsView = (function(){
   }
 
   function prepareServerOptionsForPoint(){
-    // build list of available servers for point selection depending on state
     const s1 = state.client.server1Id ? state.serversMeta.find(s=>s.id===state.client.server1Id) : null;
     const s2 = state.client.server2Id ? state.serversMeta.find(s=>s.id===state.client.server2Id) : null;
-    const screens = state.client.screensPerServer || 1;
-    const sums = V.sumConns(state.client.points);
     const opts = [];
     if(s1) opts.push({ id:s1.id, name:s1.name });
     if(s2) opts.push({ id:s2.id, name:s2.name });
-
-    // if only server1 present, make fixed in UI (still returned list)
     return opts;
   }
 
@@ -438,15 +445,13 @@ const ClientsView = (function(){
   }
 
   async function updateSaveState(){
-    // basic validations
     const nameV = V.validateName(state.client.name);
     const phoneV = V.validatePhoneRaw(state.client.phone);
     const screensV = V.validateScreens(state.client.screensPerServer);
-    const dueV = V.validateDueDate(inputs.dueDate.value);
+    const dueV = V.validateDueDate(inputs.dueDate ? inputs.dueDate.value : null);
     const planSelected = !!state.client.planId;
     const server1Selected = !!state.client.server1Id;
 
-    // sum by server must equal screens for each server selected to enable save
     const sums = V.sumConns(state.client.points);
     const s1id = state.client.server1Id;
     const s2id = state.client.server2Id;
@@ -459,56 +464,58 @@ const ClientsView = (function(){
     if(s2id){
       if((sums[s2id] || 0) !== screens) quotaExact = false;
     } else {
-      // if no server2, then all points must sum to screens on server1 exactly
       if(s1id && (sums[s1id] || 0) !== screens) quotaExact = false;
     }
 
-    // local uniqueness check for exclusive apps
     const localUnique = V.checkLocalUniqueAppUser(state.client.points);
 
     const enable = nameV.ok && phoneV.ok && screensV.ok && dueV.ok && planSelected && server1Selected && quotaExact && localUnique.ok;
-    inputs.saveBtn.disabled = !enable;
+    if(inputs.saveBtn) inputs.saveBtn.disabled = !enable;
   }
 
   async function onSaveClient(){
-    // prepare payload
     const payload = {
       name: state.client.name.trim(),
-      phone: V.normalizePhone(inputs.phone.value),
+      phone: V.normalizePhone(inputs.phone ? inputs.phone.value : ''),
       email: state.client.email ? state.client.email.trim() : null,
       planId: state.client.planId,
-      dueDate: inputs.dueDate.value,
+      dueDate: inputs.dueDate ? inputs.dueDate.value : null,
       screensPerServer: state.client.screensPerServer,
       server1Id: state.client.server1Id,
       server2Id: state.client.server2Id,
       points: state.client.points.map(p => ({ serverId:p.serverId, appId:p.appId, conns:p.conns, user:p.user, pass:p.pass }))
     };
 
-    // perform final checks & persist via clientsService.persistClientTransaction
     try{
-      inputs.saveBtn.disabled = true;
+      if(inputs.saveBtn) inputs.saveBtn.disabled = true;
       const res = await clientsService.persistClientTransaction({ mode:'create', clientPayload:payload });
       if(res && res.success){
         alert('Cliente salvo com sucesso');
-        // fechar/reset modal
         closeModal();
-        // opcional: recarregar a lista externa (não implementado aqui)
       } else {
         throw new Error('Falha ao salvar');
       }
     }catch(err){
-      alert('Erro ao salvar: ' + err.message);
-      inputs.saveBtn.disabled = false;
+      alert('Erro ao salvar: ' + (err.message || String(err)));
+      if(inputs.saveBtn) inputs.saveBtn.disabled = false;
     }
   }
 
   function closeModal(){
     const clientFormRoot = document.getElementById('clientFormRoot');
-    clientFormRoot.classList.add('hidden');
-    clientFormRoot.setAttribute('aria-hidden','true');
-    clientFormRoot.innerHTML = '';
-    // reset state
+    if(clientFormRoot){
+      clientFormRoot.classList.add('hidden');
+      clientFormRoot.setAttribute('aria-hidden','true');
+      clientFormRoot.innerHTML = '';
+    }
     state = { client: createEmptyClient(), editingPointId: null, appsMeta: state.appsMeta, serversMeta: state.serversMeta, plansMeta: state.plansMeta };
+  }
+
+  // small handler for clicking step buttons
+  function onStepClick(e){
+    const step = e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.step;
+    if(step === '1') gotoStep1();
+    if(step === '2') gotoStep2();
   }
 
   return { init };
