@@ -1,0 +1,19 @@
+<!-- Template isolado para evitar injeção -->
+<template id="clientFormTemplate">
+  <div class="client-form">
+    <h3 id="formTitle">Novo Cliente</h3>
+    <div class="form-row">
+      <input id="fieldName" placeholder="Nome" autocomplete="name" />
+      <input id="fieldPhone" placeholder="Telefone" autocomplete="tel" />
+    </div>
+    <div class="form-row">
+      <input id="fieldUser" placeholder="Usuário" autocomplete="username" />
+      <input id="fieldPass" placeholder="Senha" type="password" autocomplete="new-password" />
+    </div>
+    <div class="form-row actions">
+      <button id="saveClientBtn" class="btn-primary" type="button">Salvar</button>
+      <button id="cancelClientBtn" class="btn-ghost" type="button">Cancelar</button>
+    </div>
+    <div id="formMsg" class="msg" aria-live="polite"></div>
+  </div>
+</template>
