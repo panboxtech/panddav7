@@ -1,13 +1,10 @@
+// js/clients/clients-view.js
 // View/controller para CRUD de clientes usando manipulação DOM segura (sem injeção)
 import { listClients, createClient, updateClient, removeClient } from './clients-service.js';
 
-// expose module
 const ClientsView = (function(){
   let tableBody, newBtn, searchInput, formRoot;
   let currentEditId = null;
-
-  function q(selector, root = document){ return root.querySelector(selector); }
-  function qa(selector, root = document){ return Array.from(root.querySelectorAll(selector)); }
 
   function bindElements(){
     tableBody = document.querySelector('#clientsTable tbody');
@@ -102,79 +99,81 @@ const ClientsView = (function(){
 
   // cria formulário a partir do template em views/client-form.html sem injeção de dados
   async function showForm(data = null){
-    // fetch template (arquivo controlado). Usamos um container temporário apenas para acessar <template>
-    const res = await fetch('views/client-form.html');
-    const text = await res.text();
-    const temp = document.createElement('div');
-    temp.innerHTML = text;
-    const tpl = temp.querySelector('#clientFormTemplate');
-    if(!tpl) return;
+    try{
+      const res = await fetch('./views/client-form.html', {cache: 'no-store'});
+      if(!res.ok) throw new Error(`Falha ao carregar template do formulário: ${res.status} ${res.statusText}`);
+      const text = await res.text();
+      const temp = document.createElement('div');
+      temp.innerHTML = text;
+      const tpl = temp.querySelector('#clientFormTemplate');
+      if(!tpl) throw new Error('Template clientFormTemplate não encontrado em views/client-form.html');
 
-    // clona o conteúdo do template e preenche com textContent/value
-    const clone = tpl.content.cloneNode(true);
-    // localizar elementos no clone
-    const formEl = clone.querySelector('.client-form');
-    const title = formEl.querySelector('#formTitle');
-    const fName = formEl.querySelector('#fieldName');
-    const fPhone = formEl.querySelector('#fieldPhone');
-    const fUser = formEl.querySelector('#fieldUser');
-    const fPass = formEl.querySelector('#fieldPass');
-    const saveBtn = formEl.querySelector('#saveClientBtn');
-    const cancelBtn = formEl.querySelector('#cancelClientBtn');
-    const msg = formEl.querySelector('#formMsg');
+      const clone = tpl.content.cloneNode(true);
+      const formEl = clone.querySelector('.client-form');
+      const title = formEl.querySelector('#formTitle');
+      const fName = formEl.querySelector('#fieldName');
+      const fPhone = formEl.querySelector('#fieldPhone');
+      const fUser = formEl.querySelector('#fieldUser');
+      const fPass = formEl.querySelector('#fieldPass');
+      const saveBtn = formEl.querySelector('#saveClientBtn');
+      const cancelBtn = formEl.querySelector('#cancelClientBtn');
+      const msg = formEl.querySelector('#formMsg');
 
-    if(data){
-      title.textContent = 'Editar Cliente';
-      fName.value = data.name || '';
-      fPhone.value = data.phone || '';
-      fUser.value = data.user || '';
-      // senha não é preenchida por segurança
-    } else {
-      title.textContent = 'Novo Cliente';
-      fName.value = '';
-      fPhone.value = '';
-      fUser.value = '';
-      fPass.value = '';
-    }
-
-    // limpar formRoot e anexar clone
-    formRoot.innerHTML = '';
-    formRoot.appendChild(clone);
-    formRoot.classList.remove('hidden');
-    formRoot.setAttribute('aria-hidden','false');
-
-    cancelBtn.addEventListener('click', ()=> {
-      formRoot.classList.add('hidden');
-      formRoot.setAttribute('aria-hidden','true');
-      formRoot.innerHTML = '';
-    });
-
-    saveBtn.addEventListener('click', async ()=>{
-      msg.textContent = '';
-      const payload = {
-        name: fName.value.trim(),
-        phone: fPhone.value.trim(),
-        user: fUser.value.trim(),
-        pass: fPass.value // protótipo: senha em texto; substituir ao integrar
-      };
-      if(!payload.name || !payload.user){
-        msg.textContent = 'Nome e usuário obrigatórios';
-        return;
+      if(data){
+        title.textContent = 'Editar Cliente';
+        fName.value = data.name || '';
+        fPhone.value = data.phone || '';
+        fUser.value = data.user || '';
+      } else {
+        title.textContent = 'Novo Cliente';
+        fName.value = '';
+        fPhone.value = '';
+        fUser.value = '';
+        fPass.value = '';
       }
-      try{
-        if(data){
-          await updateClient(data.id, payload);
-        } else {
-          await createClient(payload);
-        }
+
+      formRoot.innerHTML = '';
+      formRoot.appendChild(clone);
+      formRoot.classList.remove('hidden');
+      formRoot.setAttribute('aria-hidden','false');
+
+      cancelBtn.addEventListener('click', ()=> {
         formRoot.classList.add('hidden');
         formRoot.setAttribute('aria-hidden','true');
         formRoot.innerHTML = '';
-        await renderList(searchInput.value);
-      }catch(err){
-        msg.textContent = String(err);
-      }
-    });
+      });
+
+      saveBtn.addEventListener('click', async ()=>{
+        msg.textContent = '';
+        const payload = {
+          name: fName.value.trim(),
+          phone: fPhone.value.trim(),
+          user: fUser.value.trim(),
+          pass: fPass.value
+        };
+        if(!payload.name || !payload.user){
+          msg.textContent = 'Nome e usuário obrigatórios';
+          return;
+        }
+        try{
+          if(data){
+            await updateClient(data.id, payload);
+          } else {
+            await createClient(payload);
+          }
+          formRoot.classList.add('hidden');
+          formRoot.setAttribute('aria-hidden','true');
+          formRoot.innerHTML = '';
+          await renderList(searchInput.value);
+        }catch(err){
+          msg.textContent = String(err);
+        }
+      });
+    }catch(err){
+      console.error(err);
+      formRoot.innerHTML = `<div class="msg" style="color:var(--muted)">${String(err)}</div>`;
+      formRoot.classList.remove('hidden');
+    }
   }
 
   return { init };
