@@ -1,123 +1,129 @@
 <!-- views/client-form.html -->
-<!-- Template do modal / wizard de cliente com duas seções em painéis expansíveis. -->
+<!-- Template do modal / wizard de cliente com duas seções em painéis expansíveis.
+     Ajustado para conter wrapper .overlay-scroll (rolagem interna). -->
 <template id="clientFormTemplate">
   <div class="overlay-modal" role="dialog" aria-modal="true" aria-labelledby="clientModalTitle">
     <div class="overlay-backdrop"></div>
-    <div class="overlay-content">
-      <div class="client-header">
-        <h3 id="clientModalTitle">Novo Cliente</h3>
-        <button id="closeClientModal" class="icon-btn" type="button" aria-label="Fechar">✕</button>
-      </div>
 
-      <!-- Painéis expansíveis -->
-      <div class="panels">
+    <div class="overlay-content" role="document">
+      <!-- área rolável interna que não deve ser coberta pelo footer -->
+      <div class="overlay-scroll">
 
-        <!-- Painel Dados do Cliente -->
-        <section class="panel" id="panel-data" aria-labelledby="panel-data-header">
-          <header class="panel-header" id="panel-data-header" role="button" tabindex="0" aria-expanded="true">
-            <div class="panel-summary">
-              <span class="summary-name" id="summaryName">—</span>
-              <span class="summary-dot">•</span>
-              <span class="summary-plan" id="summaryPlan">—</span>
-              <span class="summary-dot">•</span>
-              <span class="summary-screens" id="summaryScreens">Telas: —</span>
-            </div>
-            <div class="panel-controls">
-              <div class="panel-status" id="statusData"></div>
-              <span class="chevron">⌄</span>
-            </div>
-          </header>
+        <div class="client-header">
+          <h3 id="clientModalTitle">Novo Cliente</h3>
+          <button id="closeClientModal" class="icon-btn" type="button" aria-label="Fechar">✕</button>
+        </div>
 
-          <div class="panel-body" id="panel-data-body">
-            <form id="clientDataForm" novalidate>
-              <div class="form-grid">
-                <label>
-                  <span>Nome *</span>
-                  <input id="c_name" type="text" autocomplete="name" inputmode="text" />
-                  <div class="field-msg" id="err_name" aria-live="polite"></div>
-                </label>
+        <!-- Painéis expansíveis -->
+        <div class="panels">
 
-                <label>
-                  <span>Telefone *</span>
-                  <input id="c_phone" type="tel" inputmode="tel" pattern="[0-9\s()+-]*" />
-                  <div class="field-msg" id="err_phone" aria-live="polite"></div>
-                </label>
-
-                <label>
-                  <span>Email</span>
-                  <input id="c_email" type="email" autocomplete="email" />
-                  <div class="field-msg" id="err_email" aria-live="polite"></div>
-                </label>
-
-                <label class="select-row">
-                  <span>Plano *</span>
-                  <button id="btnSelectPlan" class="btn-select" type="button">Selecionar plano</button>
-                  <div class="chip" id="chipPlan" aria-hidden="true"></div>
-                  <div class="field-msg" id="err_plan" aria-live="polite"></div>
-                </label>
-
-                <label>
-                  <span>Data de Vencimento *</span>
-                  <input id="c_dueDate" type="date" />
-                  <div class="field-msg" id="err_dueDate" aria-live="polite"></div>
-                </label>
-
-                <label>
-                  <span>Telas por servidor *</span>
-                  <div class="number-stepper">
-                    <button type="button" class="stepper-decr" aria-label="Diminuir">−</button>
-                    <input id="c_screens" type="number" min="1" value="1" />
-                    <button type="button" class="stepper-incr" aria-label="Aumentar">+</button>
-                  </div>
-                  <div class="field-msg" id="err_screens" aria-live="polite"></div>
-                </label>
-
-                <label class="select-row">
-                  <span>Servidor 1 *</span>
-                  <button id="btnSelectServer1" class="btn-select" type="button">Selecionar servidor 1</button>
-                  <div class="chip" id="chipServer1" aria-hidden="true"></div>
-                  <div class="field-msg" id="err_server1" aria-live="polite"></div>
-                </label>
-
-                <label class="select-row">
-                  <span>Servidor 2</span>
-                  <button id="btnSelectServer2" class="btn-select" type="button">Selecionar servidor 2</button>
-                  <div class="chip" id="chipServer2" aria-hidden="true"></div>
-                  <div class="field-msg" id="err_server2" aria-live="polite"></div>
-                </label>
+          <!-- Painel Dados do Cliente -->
+          <section class="panel" id="panel-data" aria-labelledby="panel-data-header">
+            <header class="panel-header" id="panel-data-header" role="button" tabindex="0" aria-expanded="true">
+              <div class="panel-summary">
+                <span class="summary-name" id="summaryName">—</span>
+                <span class="summary-dot">•</span>
+                <span class="summary-plan" id="summaryPlan">—</span>
+                <span class="summary-dot">•</span>
+                <span class="summary-screens" id="summaryScreens">Telas: —</span>
               </div>
-            </form>
-          </div>
-        </section>
-
-        <!-- Painel Pontos de Acesso -->
-        <section class="panel" id="panel-points" aria-labelledby="panel-points-header">
-          <header class="panel-header" id="panel-points-header" role="button" tabindex="0" aria-expanded="false">
-            <div class="panel-summary">
-              <div id="pointsBadges" class="points-badges">Nenhum ponto</div>
-            </div>
-            <div class="panel-controls">
-              <div class="panel-status" id="statusPoints"></div>
-              <span class="chevron">⌄</span>
-            </div>
-          </header>
-
-          <div class="panel-body hidden" id="panel-points-body">
-            <div class="points-header">
-              <div class="points-info">
-                <div><strong>Quota Servidor1:</strong> <span id="quotaServer1">0</span></div>
-                <div><strong>Quota Servidor2:</strong> <span id="quotaServer2">-</span></div>
+              <div class="panel-controls">
+                <div class="panel-status" id="statusData"></div>
+                <span class="chevron">⌄</span>
               </div>
-              <div>
-                <button id="btnAddPoint" class="btn-primary" type="button">Adicionar ponto</button>
-              </div>
+            </header>
+
+            <div class="panel-body" id="panel-data-body">
+              <form id="clientDataForm" novalidate>
+                <div class="form-grid">
+                  <label>
+                    <span>Nome *</span>
+                    <input id="c_name" type="text" autocomplete="name" inputmode="text" />
+                    <div class="field-msg" id="err_name" aria-live="polite"></div>
+                  </label>
+
+                  <label>
+                    <span>Telefone *</span>
+                    <input id="c_phone" type="tel" inputmode="tel" pattern="[0-9\s()+-]*" />
+                    <div class="field-msg" id="err_phone" aria-live="polite"></div>
+                  </label>
+
+                  <label>
+                    <span>Email</span>
+                    <input id="c_email" type="email" autocomplete="email" />
+                    <div class="field-msg" id="err_email" aria-live="polite"></div>
+                  </label>
+
+                  <label class="select-row">
+                    <span>Plano *</span>
+                    <button id="btnSelectPlan" class="btn-select" type="button">Selecionar plano</button>
+                    <div class="chip" id="chipPlan" aria-hidden="true"></div>
+                    <div class="field-msg" id="err_plan" aria-live="polite"></div>
+                  </label>
+
+                  <label>
+                    <span>Data de Vencimento *</span>
+                    <input id="c_dueDate" type="date" />
+                    <div class="field-msg" id="err_dueDate" aria-live="polite"></div>
+                  </label>
+
+                  <label>
+                    <span>Telas por servidor *</span>
+                    <div class="number-stepper">
+                      <button type="button" class="stepper-decr" aria-label="Diminuir">−</button>
+                      <input id="c_screens" type="number" min="1" value="1" />
+                      <button type="button" class="stepper-incr" aria-label="Aumentar">+</button>
+                    </div>
+                    <div class="field-msg" id="err_screens" aria-live="polite"></div>
+                  </label>
+
+                  <label class="select-row">
+                    <span>Servidor 1 *</span>
+                    <button id="btnSelectServer1" class="btn-select" type="button">Selecionar servidor 1</button>
+                    <div class="chip" id="chipServer1" aria-hidden="true"></div>
+                    <div class="field-msg" id="err_server1" aria-live="polite"></div>
+                  </label>
+
+                  <label class="select-row">
+                    <span>Servidor 2</span>
+                    <button id="btnSelectServer2" class="btn-select" type="button">Selecionar servidor 2</button>
+                    <div class="chip" id="chipServer2" aria-hidden="true"></div>
+                    <div class="field-msg" id="err_server2" aria-live="polite"></div>
+                  </label>
+                </div>
+              </form>
             </div>
+          </section>
 
-            <div id="pointsList" class="points-list" aria-live="polite"></div>
+          <!-- Painel Pontos de Acesso -->
+          <section class="panel" id="panel-points" aria-labelledby="panel-points-header">
+            <header class="panel-header" id="panel-points-header" role="button" tabindex="0" aria-expanded="false">
+              <div class="panel-summary">
+                <div id="pointsBadges" class="points-badges">Nenhum ponto</div>
+              </div>
+              <div class="panel-controls">
+                <div class="panel-status" id="statusPoints"></div>
+                <span class="chevron">⌄</span>
+              </div>
+            </header>
 
-            <div id="pointFormRoot" class="card hidden" aria-hidden="true"></div>
-          </div>
-        </section>
+            <div class="panel-body hidden" id="panel-points-body">
+              <div class="points-header">
+                <div class="points-info">
+                  <div><strong>Quota Servidor1:</strong> <span id="quotaServer1">0</span></div>
+                  <div><strong>Quota Servidor2:</strong> <span id="quotaServer2">-</span></div>
+                </div>
+                <div>
+                  <button id="btnAddPoint" class="btn-primary" type="button">Adicionar ponto</button>
+                </div>
+              </div>
+
+              <div id="pointsList" class="points-list" aria-live="polite"></div>
+
+              <div id="pointFormRoot" class="card hidden" aria-hidden="true"></div>
+            </div>
+          </section>
+        </div>
       </div>
 
       <footer class="modal-footer">
