@@ -12,8 +12,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const viewRoot = document.getElementById('viewRoot');
   const viewTitle = document.getElementById('viewTitle');
 
-  function openMobileSidebar(){ sidebar.classList.add('open'); overlay.classList.remove('hidden'); overlay.focus(); }
-  function closeMobileSidebar(){ sidebar.classList.remove('open'); overlay.classList.add('hidden'); }
+  function openMobileSidebar(){
+    sidebar.classList.add('open');
+    overlay.classList.remove('hidden');
+    overlay.focus();
+    const mb = document.getElementById('mobileMenuBtn');
+    if(mb) mb.setAttribute('aria-expanded','true');
+  }
+  function closeMobileSidebar(){
+    sidebar.classList.remove('open');
+    overlay.classList.add('hidden');
+    const mb = document.getElementById('mobileMenuBtn');
+    if(mb) mb.setAttribute('aria-expanded','false');
+  }
   function toggleDesktopSidebar(){
     const minimized = sidebar.classList.toggle('minimized');
     toggleBtn.setAttribute('aria-pressed', String(minimized));
@@ -43,7 +54,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
         temp.innerHTML = text;
         viewRoot.innerHTML = '';
         Array.from(temp.childNodes).forEach(node => viewRoot.appendChild(node));
-        // chama init da view se disponível globalmente
         if(window.clientsView && typeof window.clientsView.init === 'function'){
           try{ await window.clientsView.init(); }catch(err){ console.error('Erro inicializando clientsView:', err); }
         }
